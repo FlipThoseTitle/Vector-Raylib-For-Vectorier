@@ -1,0 +1,66 @@
+using System.Numerics;
+
+namespace Vector.Core.Animation
+{
+    public class AnimationDelta
+    {
+        private readonly int _corner;
+
+        public Vector2 Value
+        {
+            get;
+        }
+
+        public AnimationDeltaName Name
+        {
+            get;
+        }
+
+        public AnimationDeltaType Type
+        {
+            get;
+        }
+
+        public AnimationDelta(AnimationDeltaName name, AnimationDeltaType type, Vector2 value, int corner)
+        {
+            Name = name;
+            _corner = corner;
+            Value = value;
+            Type = type;
+        }
+
+        public int GetCorner(int sign)
+        {
+            if (sign == -1)
+            {
+                switch (_corner)
+                {
+                    case 0:
+                        return 1;
+                    case 1:
+                        return 0;
+                    case 2:
+                        return 3;
+                    case 3:
+                        return 2;
+                }
+            }
+            return _corner;
+        }
+
+        public bool IsInterval(double value)
+        {
+            return More(value, Value.X) && Less(value, Value.Y);
+        }
+
+        public static bool More(double target, float value)
+        {
+            return float.IsNaN(value) || target >= value;
+        }
+
+        public static bool Less(double target, float value)
+        {
+            return float.IsNaN(value) || target <= value;
+        }
+    }
+}

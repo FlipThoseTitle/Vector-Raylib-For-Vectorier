@@ -1,0 +1,35 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <ApplicationIcon>1.ico</ApplicationIcon>
+    <StartupObject>Vector.Vector</StartupObject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Raylib-cs" Version="8.0.0" />
+  </ItemGroup>
+
+	<ItemGroup>
+		<Content Include="Resources\**\*">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+			<CopyToPublishDirectory>Always</CopyToPublishDirectory>
+		</Content>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Remove="1.ico" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Content Include="1.ico" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Resource Include="1.ico" />
+	</ItemGroup>
+
+</Project>

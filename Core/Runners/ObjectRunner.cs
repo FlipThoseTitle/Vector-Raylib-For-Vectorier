@@ -1,0 +1,217 @@
+﻿using System.Numerics;
+using System.Xml;
+using Vector.Core.Location;
+using Vector.Core.Transformation;
+using Vector.Core.Utilities;
+
+namespace Vector.Core.Runners
+{
+    public class ObjectRunner
+    {
+        public string Name;
+
+        public Vector2 LocalPosition;
+
+        public Vector2 WorldPosition
+        {
+            get
+            {
+                if (Parent == null)
+                {
+                    return LocalPosition;
+                }
+                return Parent.WorldPosition + LocalPosition;
+            }
+        }
+
+        public Elements Element;
+
+        public ObjectRunner Parent;
+
+        public List<ObjectRunner> Childs = new List<ObjectRunner>();
+
+        public float Factor;
+
+        public VisualContainer VisualContainer;
+
+        protected Dictionary<string, TransformSystem> TransformationDictionary = new Dictionary<string, TransformSystem>();
+
+        protected List<TransformSystem> TransformationData = new List<TransformSystem>();
+
+        public ObjectRunner(ObjectRunner parent)
+        {
+            Parent = parent;
+        }
+
+        public void Parse(XmlNode node, XmlNode data, Dictionary<string, string> choices)
+        {
+            Name = node.Attributes["Name"].ParseString("");
+            LocalPosition = new Vector2(node.Attributes["X"].ParseFloat(), node.Attributes["Y"].ParseFloat());
+            Factor = node.Attributes["Factor"].ParseFloat();
+
+            if (Parent != null)
+            {
+                LocalPosition += Parent.LocalPosition;
+            }
+
+            var localTransform = Elements.GetTransformationNode(node);
+            ParseTransformationData(localTransform);
+
+            CreateElement(node["Content"], choices);
+
+            if (data != null)
+            {
+                var externalTransform = Elements.GetTransformationNode(data);
+                ParseTransformationData(externalTransform);
+
+                CreateElement(data["Content"], choices);
+            }
+        }
+
+        public void CreateElement(XmlNode node, Dictionary<string, string> choices)
+        {
+            var element = new Elements(this);
+            element.Parse(node, choices);
+            if (Element == null)
+            {
+                Element = element;
+            }
+            else
+            {
+                Element.CopyFrom(element);
+            }
+        }
+
+        public void CreateChild(XmlNode mainNode, Dictionary<string, string> choices)
+        {
+            if (mainNode["Properties"] != null && mainNode["Properties"]["Static"] != null && mainNode["Properties"]["Static"]["Selection"] != null)
+            {
+                var selectionNode = mainNode["Properties"]["Static"]["Selection"];
+                if (choices[selectionNode.Attributes["Choice"].Value] != selectionNode.Attributes["Variant"].Value)
+                {
+                    return;
+                }
+            }
+
+            string name = mainNode.Attributes["Name"].ParseString(string.Empty);
+
+            XmlNode data = null;
+
+            if (!string.IsNullOrEmpty(name))
+            {
+                data = Sets.ObjectNode(name);
+            }
+
+            var objectRunner1 = new ObjectRunner(this);
+            objectRunner1.Parse(mainNode, data, choices);
+            objectRunner1.Init();
+            Childs.Add(objectRunner1);
+        }
+
+        public void SetLayer(VisualContainer container)
+        {
+            LocalPosition = Vector2.Zero;
+
+            VisualContainer = container;
+            foreach (var child in Childs)
+            {
+                child.SetLayer(VisualContainer);
+            }
+            foreach (var runner in Element.Runners)
+            {
+                runner.Parent = VisualContainer;
+                runner.Z += VisualContainer.Z;
+            }
+        }
+
+        public void Init()
+        {
+            InitElements();
+            foreach (var child in Childs)
+            {
+                BuildTranformationTable(child.TransformationData);
+            }
+            BuildTranformationTable(TransformationData);
+        }
+
+        private void InitElements()
+        {
+            foreach (var runner in Element.Runners)
+            {
+                runner.InitRunner(LocalPosition);
+                BuildTranformationTable(runner.TransformationData);
+            }
+        }
+
+        public virtual void ParseTransformationData(XmlNode node)
+        {
+            if (node == null || node["Dynamic"] == null)
+            {
+                return;
+            }
+            foreach (XmlNode node2 in node["Dynamic"])
+            {
+                if (node2.Name == "Transformation")
+                {
+                    var system = TransformSystem.Create(node2);
+                    system.MainParent = this;
+                    AddTransformationData(system);
+                }
+            }
+        }
+
+        public void BuildTranformationTable(List<TransformSystem> systems)
+        {
+            foreach (TransformSystem system in systems)
+            {
+                TransformationDictionary[system.Name] = system;
+            }
+        }
+
+        public int RunTranformation(string name)
+        {
+            if (TransformationDictionary.ContainsKey(name))
+            {
+                TransformationDictionary[name].Reset();
+                return TransformationDictionary[name].Run();
+            }
+            int num2 = 0;
+            for (int j = 0; j < Childs.Count; j++)
+            {
+                int num3 = Childs[j].RunTranformation(name);
+                if (num3 != 0)
+                {
+                    num2 = System.Math.Max(num3, num2);
+                }
+            }
+            return num2;
+        }
+
+        public int GetTransformationFrame(string name)
+        {
+            if (TransformationDictionary.ContainsKey(name))
+            {
+                return TransformationDictionary[name].FramesCount;
+            }
+            int num2 = 0;
+            for (int j = 0; j < Childs.Count; j++)
+            {
+                int transformationFrame = Childs[j].GetTransformationFrame(name);
+                if (transformationFrame != 0)
+                {
+                    num2 = System.Math.Max(transformationFrame, num2);
+                }
+            }
+            return num2;
+        }
+
+        protected void AddTransformationData(TransformSystem p_data)
+        {
+            if (TransformationData == null)
+            {
+                TransformationData = new List<TransformSystem>();
+            }
+            TransformationData.Add(p_data);
+        }
+    }
+}
