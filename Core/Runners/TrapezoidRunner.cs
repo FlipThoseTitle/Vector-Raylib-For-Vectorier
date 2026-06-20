@@ -1,4 +1,7 @@
+using Raylib_cs;
+using System.Drawing;
 using System.Numerics;
+using Vector.Core.Location;
 
 namespace Vector.Core.Runners
 {
@@ -78,6 +81,30 @@ namespace Vector.Core.Runners
         //    bool flag2 = equality ? num2 <= 0 : num2 < 0;
         //    return flag1 && flag2;
         //}
+        public override void Draw()
+        {
+            if (!IsEnabled)
+                return;
+
+            var vs = Sets.Current.Containers[1];
+
+            Vector2 a = vs.TransformPoint(Point1);
+            Vector2 b = vs.TransformPoint(Point2);
+            Vector2 c = vs.TransformPoint(Point3);
+            Vector2 d = vs.TransformPoint(Point4);
+                
+            Rlgl.DisableBackfaceCulling();
+            Rlgl.Begin(DrawMode.Quads);
+
+            Rlgl.Color4ub(0, 0, 255, 51);
+
+            Rlgl.Vertex2f(a.X, a.Y);
+            Rlgl.Vertex2f(b.X, b.Y);
+            Rlgl.Vertex2f(c.X, c.Y);
+            Rlgl.Vertex2f(d.X, d.Y);
+
+            Rlgl.End();
+        }
 
         public override void TransformResize(Vector2 size)
         {

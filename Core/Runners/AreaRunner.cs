@@ -60,6 +60,9 @@ namespace Vector.Core.Runners
 
         public override void Draw()
         {
+            if (!IsEnabled)
+                return;
+
             var vs = Sets.Current.Containers[1];
             var pos = vs.TransformPoint(rectangle.Origin);
             Raylib.DrawRectangleV(pos, rectangle.Size * WorldScale, new Color(255, 255, 0, 51));

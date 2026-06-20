@@ -350,9 +350,9 @@ namespace Vector
 
                     if (RenderPlatforms)
                     {
-                        for (int i = 0; i < Sets.Current.Platforms.Count; i++)
+                        for (int i = 0; i < Sets.Current.Quads.Count; i++)
                         {
-                            Sets.Current.Platforms[i].Draw();
+                            Sets.Current.Quads[i].Draw();
                         }
                     }
                     if (RenderAreas)

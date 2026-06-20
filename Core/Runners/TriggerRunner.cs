@@ -140,6 +140,9 @@ namespace Vector.Core.Runners
 
         public void DrawRectangle()
         {
+            if (!IsEnabled)
+                return;
+
             var vs = Sets.Current.Containers[1];
             var pos = vs.TransformPoint(rectangle.Origin);
             Raylib.DrawRectangleV(pos, rectangle.Size * WorldScale, new Color(255, 0, 0, 51));
