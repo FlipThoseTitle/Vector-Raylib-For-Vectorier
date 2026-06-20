@@ -3,6 +3,12 @@ Port of the game Vector to the Raylib framework
 
 This was made with debugging the game in mind.
 
+
+To enter a specific level, launch the app with -level LEVEL NAME argument.
+To enter in hunter mode, add -huntermode.
+
+For example: -level TECHPARK_BONUS_05 -huntermode
+
 ## Controls
 
 - Esc - Pause the game
