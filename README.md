@@ -29,6 +29,8 @@ the executable also works).
 ## Controls
 
 - Esc - Pause the game
+- F11 - Fullscreen
+- Q - Change Anti-Aliasing
 - F - Next frame (only when paused)
 - S - Slow Mode
 - A - Shows areas
