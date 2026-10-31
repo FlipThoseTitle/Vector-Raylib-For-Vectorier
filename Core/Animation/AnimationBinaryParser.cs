@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+using System.Collections.Concurrent;
 using System.Numerics;
 using Vector.Core.Frame;
 
@@ -5,7 +7,8 @@ namespace Vector.Core.Animation
 {
     public static class AnimationBinaryParser
     {
-        private static readonly Dictionary<string, Provider> CachedBinary = new Dictionary<string, Provider>();
+        // Concurrent: every animation is parsed in parallel at start-up.
+        private static readonly ConcurrentDictionary<string, Provider> CachedBinary = new ConcurrentDictionary<string, Provider>();
 
         public static void ClearCachedBinary()
         {
@@ -16,9 +19,9 @@ namespace Vector.Core.Animation
         {
             if (useCache)
             {
-                if (CachedBinary.ContainsKey(fileName))
+                if (CachedBinary.TryGetValue(fileName, out var cached))
                 {
-                    return CachedBinary[fileName];
+                    return cached;
                 }
             }
             var bytes = ResourceManager.GetBinary(fileName);
@@ -26,32 +29,30 @@ namespace Vector.Core.Animation
             {
                 return new Provider(0);
             }
-            var stream = new MemoryStream(bytes);
-            var reader = new BinaryReader(stream);
-
-            int count = reader.ReadInt32();
+            // Read straight from the bytes (little-endian, like BinaryReader) without a stream per value.
+            var span = new ReadOnlySpan<byte>(bytes);
+            int pos = 0;
+            int count = BinaryPrimitives.ReadInt32LittleEndian(span.Slice(pos)); pos += 4;
             var provider = new Provider(count);
 
             for (int i = 0; i < count; i++)
             {
-                reader.ReadByte();
-                int num = reader.ReadInt32();
+                pos += 1; // frame flag
+                int num = BinaryPrimitives.ReadInt32LittleEndian(span.Slice(pos)); pos += 4;
                 Vector3[] array = new Vector3[num];
 
                 for (int j = 0; j < num; j++)
                 {
-                    array[j].X = reader.ReadSingle();
-                    array[j].Y = -reader.ReadSingle();
-                    array[j].Z = reader.ReadSingle();
-
+                    array[j].X = BinaryPrimitives.ReadSingleLittleEndian(span.Slice(pos)); 
+                    array[j].Y = -BinaryPrimitives.ReadSingleLittleEndian(span.Slice(pos + 4));
+                    array[j].Z = BinaryPrimitives.ReadSingleLittleEndian(span.Slice(pos + 8));
+                    pos += 12;
                 }
                 provider.Add(array, i);
             }
-            reader.Close();
-            stream.Close();
             if (useCache)
             {
-                CachedBinary.Add(fileName, provider);
+                CachedBinary.TryAdd(fileName, provider);
             }
             return provider;
         }

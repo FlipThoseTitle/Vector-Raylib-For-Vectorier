@@ -1,4 +1,4 @@
-﻿using System.Xml;
+using System.Xml;
 
 namespace Vector.Core.Utilities
 {
@@ -122,7 +122,7 @@ namespace Vector.Core.Utilities
 
         public static XmlDocument OpenXMLDocument(string path, string file = "", OpenXmlType openType = OpenXmlType.Normal, bool pIgnoreComments = true, bool dialog = true)
         {
-            string fullPath = Path.Combine(path, file);
+            string fullPath = PathCase.Resolve(Path.Combine(path, file));
             var xmlReaderSettings = new XmlReaderSettings();
             xmlReaderSettings.IgnoreComments = pIgnoreComments;
             XmlDocument document = null;

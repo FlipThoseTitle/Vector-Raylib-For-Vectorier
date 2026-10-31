@@ -18,7 +18,7 @@ namespace Vector.Core.Runners
 
             var vs = Sets.Current.Containers[1];
             var pos = vs.TransformPoint(rectangle.Origin);
-            Raylib.DrawRectangleV(pos, rectangle.Size * WorldScale, new Color(0, 0, 255, 51));
+            Raylib.DrawRectangleV(pos, rectangle.Size * WorldScale, new Color(0, 0, 255, 64));
         }
     }
 }

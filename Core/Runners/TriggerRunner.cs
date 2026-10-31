@@ -145,7 +145,7 @@ namespace Vector.Core.Runners
 
             var vs = Sets.Current.Containers[1];
             var pos = vs.TransformPoint(rectangle.Origin);
-            Raylib.DrawRectangleV(pos, rectangle.Size * WorldScale, new Color(255, 0, 0, 51));
+            Raylib.DrawRectangleV(pos, rectangle.Size * WorldScale, new Color(255, 255, 0, 64));
         }
 
         public override void Draw()

@@ -1,0 +1,60 @@
+{
+    // Publish the game as one self-contained executable (+ the raylib native library) per platform.
+    // Output: publish/<runtime>/ — copy its content to Vectorier-Editor-Avalonia/Data/Game/<runtime>/
+    // (the editor looks for win-x64, linux-x64 and osx-arm64).
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build (Debug)",
+            "type": "process",
+            "command": "dotnet",
+            "args": ["build", "${workspaceFolder}/Vector-Raylib.csproj", "-c", "Debug"],
+            "group": { "kind": "build", "isDefault": true },
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "Publish Windows (win-x64)",
+            "type": "process",
+            "command": "dotnet",
+            "args": ["publish", "${workspaceFolder}/Vector-Raylib.csproj", "-c", "Release", "-r", "win-x64", "--self-contained", "true", "-o", "${workspaceFolder}/publish/win-x64"],
+            "group": "build",
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "Publish Linux (linux-x64)",
+            "type": "process",
+            "command": "dotnet",
+            "args": ["publish", "${workspaceFolder}/Vector-Raylib.csproj", "-c", "Release", "-r", "linux-x64", "--self-contained", "true", "-o", "${workspaceFolder}/publish/linux-x64"],
+            "group": "build",
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "Publish macOS Apple Silicon (osx-arm64)",
+            "type": "process",
+            "command": "dotnet",
+            "args": ["publish", "${workspaceFolder}/Vector-Raylib.csproj", "-c", "Release", "-r", "osx-arm64", "--self-contained", "true", "-o", "${workspaceFolder}/publish/osx-arm64"],
+            "group": "build",
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "Publish macOS Intel (osx-x64)",
+            "type": "process",
+            "command": "dotnet",
+            "args": ["publish", "${workspaceFolder}/Vector-Raylib.csproj", "-c", "Release", "-r", "osx-x64", "--self-contained", "true", "-o", "${workspaceFolder}/publish/osx-x64"],
+            "group": "build",
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "Publish All",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "Publish Windows (win-x64)",
+                "Publish Linux (linux-x64)",
+                "Publish macOS Apple Silicon (osx-arm64)",
+                "Publish macOS Intel (osx-x64)"
+            ],
+            "group": "build",
+            "problemMatcher": []
+        }
+    ]
+}

@@ -1,4 +1,4 @@
-﻿using Raylib_cs;
+using Raylib_cs;
 using System.Numerics;
 using Vector.Core.Location;
 using Vector.Core.Node;
@@ -134,7 +134,7 @@ namespace Vector.Core.Detector
             var start = vs.TransformPoint(Start.Start);
             Raylib.DrawLineEx(start, vs.TransformPoint(Start.End), 3, Color.Yellow);
 
-            Raylib.DrawText(Start.Start.ToString(), (int)start.X, (int)start.Y, 5, Color.White);
+            GameFont.Draw(Start.Start.ToString(), start.X, start.Y, 5, Color.White);
         }
 
         public string GetStringType()

@@ -99,7 +99,21 @@ namespace Vector.Core.Runners
 
             if (!string.IsNullOrEmpty(name))
             {
-                data = Sets.ObjectNode(name);
+                // Safe load: an object placed inside itself (directly or deeper) would nest forever. Its definition
+                // is not followed again; the inline content (if any) still loads.
+                bool nested = false;
+                for (var p = this; p != null; p = p.Parent)
+                {
+                    if (p.Name == name)
+                    {
+                        nested = true;
+                        break;
+                    }
+                }
+                if (nested)
+                    Console.WriteLine($"Object \"{name}\" contains itself: the inner copy is skipped.");
+                else
+                    data = Sets.ObjectNode(name);
             }
 
             var objectRunner1 = new ObjectRunner(this);

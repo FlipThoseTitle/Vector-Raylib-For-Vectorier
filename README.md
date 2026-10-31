@@ -9,6 +9,23 @@ To enter in hunter mode, add -huntermode.
 
 For example: -level TECHPARK_BONUS_05 -huntermode
 
+## Vectorier
+
+Vectorier starts the game with `-project PROJECT_NAME -level LEVEL_NAME [-huntermode]`.
+The published game sits in `Data/Game/<runtime>/` (only the executable and the raylib library) and reads the
+project `Data/Projects/PROJECT_NAME/`, which uses Vectorier's layout: `xmlroot` instead of `xml` and trick icons in
+`icons/tricks`. Without `-project`, the `Resources` folder next to the executable is used as before.
+
+## Publishing
+
+VS Code tasks (Terminal › Run Task): `Publish Windows (win-x64)`, `Publish Linux (linux-x64)`,
+`Publish macOS Apple Silicon (osx-arm64)`, `Publish macOS Intel (osx-x64)` and `Publish All`.
+Each publishes a self-contained Release build to `publish/<runtime>/`. Copy that folder's content to
+`Data/Game/<runtime>/` of Vectorier.
+
+Text uses Arial from the system (Linux: Liberation Sans / Arimo when Arial is not installed; an `arial.ttf` next to
+the executable also works).
+
 ## Controls
 
 - Esc - Pause the game

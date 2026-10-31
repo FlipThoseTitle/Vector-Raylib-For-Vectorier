@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -7,29 +7,41 @@
     <Nullable>enable</Nullable>
     <ApplicationIcon>1.ico</ApplicationIcon>
     <StartupObject>Vector.Vector</StartupObject>
+    <AssemblyName>Vector-Raylib</AssemblyName>
+    <RuntimeIdentifiers>win-x64;linux-x64;osx-x64;osx-arm64</RuntimeIdentifiers>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <!--
+    Release publish (see .vscode/tasks.json): one self-contained executable per platform plus the raylib native
+    library next to it (raylib.dll / libraylib.so / libraylib.dylib). No Resources folder: launched by Vectorier with
+    -project NAME, the game reads Data/Projects/NAME.
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <!-- Removes the unused parts of the bundled .NET runtime (~34 MB → ~12 MB). The game uses no reflection. -->
+    <PublishTrimmed>true</PublishTrimmed>
+    <DebugType>none</DebugType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Raylib-cs" Version="8.0.0" />
   </ItemGroup>
 
-	<ItemGroup>
-		<Content Include="Resources\**\*">
-			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
-			<CopyToPublishDirectory>Always</CopyToPublishDirectory>
-		</Content>
-	</ItemGroup>
+  <!-- Debug runs without -project still use the original Resources folder next to the executable. -->
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <Content Include="Resources\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 
-	<ItemGroup>
-	  <None Remove="1.ico" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <Content Include="1.ico" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <Resource Include="1.ico" />
-	</ItemGroup>
+  <ItemGroup>
+    <None Remove="1.ico" />
+    <Resource Include="1.ico" />
+  </ItemGroup>
 
 </Project>

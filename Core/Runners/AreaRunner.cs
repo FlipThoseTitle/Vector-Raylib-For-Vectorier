@@ -23,6 +23,9 @@ namespace Vector.Core.Runners
 
         protected string _TypeName;
 
+        /// <summary>The XML Type ("Trick", "Help", "Catch", an animation type...).</summary>
+        public string TypeName => _TypeName;
+
         public bool IsNone => _Type == AreaType.None;
 
         public bool IsHelp => _Type == AreaType.Help;
@@ -65,7 +68,7 @@ namespace Vector.Core.Runners
 
             var vs = Sets.Current.Containers[1];
             var pos = vs.TransformPoint(rectangle.Origin);
-            Raylib.DrawRectangleV(pos, rectangle.Size * WorldScale, new Color(255, 255, 0, 51));
+            Raylib.DrawRectangleV(pos, rectangle.Size * WorldScale, new Color(255, 0, 0, 64));
         }
 
         public virtual bool OnKeyClick(KeyVariables Key)

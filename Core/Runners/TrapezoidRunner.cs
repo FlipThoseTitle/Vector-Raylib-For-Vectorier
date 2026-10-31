@@ -96,7 +96,7 @@ namespace Vector.Core.Runners
             Rlgl.DisableBackfaceCulling();
             Rlgl.Begin(DrawMode.Quads);
 
-            Rlgl.Color4ub(0, 0, 255, 51);
+            Rlgl.Color4ub(0, 0, 255, 64);
 
             Rlgl.Vertex2f(a.X, a.Y);
             Rlgl.Vertex2f(b.X, b.Y);

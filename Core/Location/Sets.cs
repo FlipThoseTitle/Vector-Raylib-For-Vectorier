@@ -163,11 +163,23 @@ namespace Vector.Core.Location
             LoadObjects();
         }
 
+        private static XmlDocument[] ParallelLoad(List<string> files)
+        {
+            var documents = new XmlDocument[files.Count];
+            Parallel.For(0, files.Count, i => documents[i] = XmlUtils.OpenXMLDocument(VectorPaths.Xml, files[i]));
+            return documents;
+        }
+
         private void LoadBuilds()
         {
-            foreach (var file in _filesBuilds)
+            // Read and parse the files in parallel, then use them in their original order.
+            var buildFiles = _filesBuilds.ToList();
+            var documents = ParallelLoad(buildFiles);
+            for (int f = 0; f < buildFiles.Count; f++)
             {
-                var document = XmlUtils.OpenXMLDocument(VectorPaths.Xml, file);
+                var document = documents[f];
+                if (document == null)
+                    continue;
                 if (document["Root"] != null && document["Root"]["Objects"] != null)
                 {
                     _xmlBuilds.Add(document["Root"]["Objects"]);
@@ -185,10 +197,13 @@ namespace Vector.Core.Location
 
         private void LoadObjects()
         {
-            foreach (var file in _filesObjects)
+            var objectFiles = _filesObjects.ToList();
+            var documents = ParallelLoad(objectFiles);
+            for (int f = 0; f < objectFiles.Count; f++)
             {
-                var document = XmlUtils.OpenXMLDocument(VectorPaths.Xml, file);
-                var root = document["Root"];
+                var file = objectFiles[f];
+                var document = documents[f];
+                var root = document?["Root"];
                 if (root == null)
                 {
                     Console.WriteLine("Empty node from file \"" + file + "\"!");
@@ -409,10 +424,13 @@ namespace Vector.Core.Location
 
         public void InitVisual()
         {
+            // Decode every PNG the level shows on all cores first; the GPU upload then only copies pixels.
+            ResourceManager.PrefetchImages(Visuals.Select(v => v.Name));
             foreach (var visual in Visuals)
             {
                 visual.Init();
             }
+            ResourceManager.ReleasePrefetched();
         }
 
         public void InitAreas()

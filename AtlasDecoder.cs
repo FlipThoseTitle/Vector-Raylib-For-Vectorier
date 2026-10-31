@@ -1,4 +1,4 @@
-﻿using Raylib_cs;
+using Raylib_cs;
 using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
@@ -246,13 +246,8 @@ namespace Vector
 
         private static List<AtlasSprite> ParseJson(string json)
         {
-            JsonRoot? root = JsonSerializer.Deserialize<JsonRoot>(
-                json,
-                new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                }
-            );
+            // Source-generated (no reflection), so it keeps working in trimmed builds.
+            JsonRoot? root = JsonSerializer.Deserialize(json, AtlasJsonContext.Default.JsonRoot);
 
             if (root == null || root.frames == null)
                 throw new Exception("Invalid atlas JSON.");
@@ -518,12 +513,12 @@ namespace Vector
             }
         }
 
-        private class JsonRoot
+        internal class JsonRoot
         {
             public JsonFrame[] frames { get; set; } = [];
         }
 
-        private class JsonFrame
+        internal class JsonFrame
         {
             public string filename { get; set; } = "";
             public bool rotated { get; set; }
@@ -531,12 +526,18 @@ namespace Vector
             public JsonRect sourceSize { get; set; } = new();
         }
 
-        private class JsonRect
+        internal class JsonRect
         {
             public int x { get; set; }
             public int y { get; set; }
             public int w { get; set; }
             public int h { get; set; }
         }
+    }
+
+    [System.Text.Json.Serialization.JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
+    [System.Text.Json.Serialization.JsonSerializable(typeof(AtlasDecoder.JsonRoot))]
+    internal partial class AtlasJsonContext : System.Text.Json.Serialization.JsonSerializerContext
+    {
     }
 }

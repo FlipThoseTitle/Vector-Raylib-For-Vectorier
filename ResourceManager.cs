@@ -1,4 +1,5 @@
-﻿using Raylib_cs;
+using Raylib_cs;
+using System.Collections.Concurrent;
 
 namespace Vector
 {
@@ -12,11 +13,14 @@ namespace Vector
 
         public static Dictionary<string, string> music = new();
 
+        /// <summary>Files of a folder; nothing when the folder does not exist (a project may lack music, icons...).</summary>
+        private static string[] FilesIn(string folder) => Directory.Exists(folder) ? Directory.GetFiles(folder) : Array.Empty<string>();
+
         public static void LoadResources()
         {
-            foreach (var imageFile in Directory.GetFiles(VectorPaths.Textures))
+            foreach (var imageFile in FilesIn(VectorPaths.Textures))
             {
-                if (!imageFile.EndsWith(".png"))
+                if (!imageFile.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
@@ -27,7 +31,7 @@ namespace Vector
                 }
             }
 
-            foreach (var icon in Directory.GetFiles(VectorPaths.Icons))
+            foreach (var icon in FilesIn(VectorPaths.Icons))
             {
                 var fileName = Path.GetFileNameWithoutExtension(icon);
                 if (!images.ContainsKey(fileName))
@@ -36,7 +40,7 @@ namespace Vector
                 }
             }
 
-            foreach (var soundFile in Directory.GetFiles(VectorPaths.Sounds))
+            foreach (var soundFile in FilesIn(VectorPaths.Sounds))
             {
                 var fileName = Path.GetFileNameWithoutExtension(soundFile);
                 if (!sounds.ContainsKey(fileName))
@@ -45,18 +49,53 @@ namespace Vector
                 }
             }
 
-            foreach (var musicFile in Directory.GetFiles(VectorPaths.Music))
+            foreach (var musicFile in FilesIn(VectorPaths.Music))
             {
                 var fileName = Path.GetFileNameWithoutExtension(musicFile);
-                if (!sounds.ContainsKey(fileName))
-                {
-                    music.Add(fileName, musicFile);
-                }
+                music.TryAdd(fileName, musicFile);
             }
+        }
+
+        /// <summary>Images decoded ahead of time (on worker threads), waiting for their GPU upload in GetTexture.</summary>
+        private static readonly ConcurrentDictionary<string, Image> prefetched = new();
+
+        /// <summary>
+        /// Decodes the PNGs of <paramref name="names"/> in parallel. Decoding is CPU work and safe off the main thread;
+        /// only the texture upload (GetTexture) has to stay on it.
+        /// </summary>
+        public static void PrefetchImages(IEnumerable<string> names)
+        {
+            var todo = names.Where(n => n != null && images.ContainsKey(n) && !textureCache.ContainsKey(n) && !prefetched.ContainsKey(n))
+                .Distinct().ToList();
+            if (todo.Count < 2)
+                return;
+            Parallel.ForEach(todo, name =>
+            {
+                try
+                {
+                    byte[] data = File.ReadAllBytes(images[name]);
+                    var image = Raylib.LoadImageFromMemory(".png", data);
+                    if (image.Width > 0 && image.Height > 0)
+                        prefetched[name] = image;
+                }
+                catch
+                {
+                    // Left to the normal (main thread) loading.
+                }
+            });
+        }
+
+        /// <summary>Frees decoded images that were not used.</summary>
+        public static void ReleasePrefetched()
+        {
+            foreach (var name in prefetched.Keys.ToList())
+                if (prefetched.TryRemove(name, out var image))
+                    Raylib.UnloadImage(image);
         }
 
         public static byte[] GetBinary(string path)
         {
+            path = PathCase.Resolve(path);
             if (!File.Exists(path))
             {
                 return null;
@@ -80,7 +119,16 @@ namespace Vector
                 return textureCache[name];
             }
 
-            var texture = Raylib.LoadTexture(images[name]);
+            Texture2D texture;
+            if (prefetched.TryRemove(name, out var image))
+            {
+                texture = Raylib.LoadTextureFromImage(image);
+                Raylib.UnloadImage(image);
+            }
+            else
+            {
+                texture = Raylib.LoadTexture(images[name]);
+            }
             Raylib.SetTextureWrap(texture, TextureWrap.Clamp);
             Raylib.SetTextureFilter(texture, TextureFilter.Bilinear);
             textureCache.Add(name, texture);
@@ -140,7 +188,7 @@ namespace Vector
 
             foreach (var ext in exts)
             {
-                existingPath = p_path + ext;
+                existingPath = PathCase.Resolve(p_path + ext);
 
                 if (File.Exists(existingPath))
                 {
