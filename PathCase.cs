@@ -10,6 +10,9 @@ namespace Vector
     {
         private static readonly ConcurrentDictionary<string, Dictionary<string, string>> Folders = new();
 
+        /// <summary>Forgets the folder listings (files were added since: Reload Moves).</summary>
+        public static void Clear() => Folders.Clear();
+
         public static string Resolve(string path)
         {
             if (OperatingSystem.IsWindows() || File.Exists(path) || Directory.Exists(path))

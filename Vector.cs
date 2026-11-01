@@ -100,8 +100,11 @@ namespace Vector
             x += 13; // action buttons keep the same text column as the toggles
 
             string key = Key;
-            GameFont.Draw(key, x, textY, FontSize, new Color(KeyColor.R, KeyColor.G, KeyColor.B, alpha));
-            x += Raylib.MeasureTextEx(GameFont.Font, key, FontSize, FontSize / 10f).X + 7;
+            if (key.Length > 0) // a button without a key shows only its name
+            {
+                GameFont.Draw(key, x, textY, FontSize, new Color(KeyColor.R, KeyColor.G, KeyColor.B, alpha));
+                x += Raylib.MeasureTextEx(GameFont.Font, key, FontSize, FontSize / 10f).X + 7;
+            }
             GameFont.Draw(DynamicText?.Invoke() ?? Text, x, textY, FontSize, new Color((byte)235, (byte)235, (byte)235, alpha));
         }
     }
@@ -366,6 +369,8 @@ namespace Vector
 
                         DrawButtons();
 
+                        DrawNotice();
+
                         // Same place and size as raylib's FPS counter, in Arial and always white.
                         GameFont.DrawBold($"{Raylib.GetFPS()} FPS", 0, 0, 20, Color.White);
                     }
@@ -385,11 +390,12 @@ namespace Vector
             float x = ScreenWidth - width - margin;
             float y = margin;
 
-            void Add(KeyboardKey key, string label, string text, Action onClick, Func<bool>? isOn = null, Func<bool>? isEnabled = null)
+            void Add(KeyboardKey? key, string label, string text, Action onClick, Func<bool>? isOn = null, Func<bool>? isEnabled = null)
             {
                 var button = new Button(x, y, width, label, text, onClick) { IsOn = isOn, IsEnabled = isEnabled };
                 Buttons.Add(button);
-                ButtonKeys[key] = button;
+                if (key is KeyboardKey k)
+                    ButtonKeys[k] = button;
                 y += Button.Height + gap;
             }
 
@@ -412,6 +418,8 @@ namespace Vector
             Add(KeyboardKey.F, "F", "Next Frame", () => stepOneFrame = true, isEnabled: () => pause);
             Add(KeyboardKey.S, "S", "Slow Mode", ToggleSlowMode, () => LevelMainController.current?.slowModeFrames == 10);
             Add(KeyboardKey.R, "R", "Restart", () => LevelMainController.current.ReloadButton());
+            // No key: it reads every move again, which takes a moment (for modders editing moves.xml or .bin files).
+            Add(null, "", "Reload Moves", () => LevelMainController.current.ReloadMovesButton());
             Add(KeyboardKey.H, "H", "Hide UI", () => hideDebugUi = !hideDebugUi);
 
             // Display.
@@ -420,6 +428,31 @@ namespace Vector
             Buttons[^1].DynamicText = () => "Anti-alias: " + AntiAliasNames[AntiAlias];
             Add(KeyboardKey.F11, "F11", "Full Screen", ToggleFullScreen, () => Raylib.IsWindowState(ConfigFlags.BorderlessWindowMode));
             Add(KeyboardKey.M, "M", "Mute Music", SoundsManager.ToggleMusicMute, () => SoundsManager.MusicMuted);
+        }
+
+        // ================= NOTICE ================= //
+
+        static string? _notice;
+        static bool _noticeIsError;
+        static double _noticeUntil;
+
+        /// <summary>A short line over the move name (Reload Moves: done, or why moves.xml could not be read).</summary>
+        public static void ShowNotice(string text, bool isError)
+        {
+            _notice = text;
+            _noticeIsError = isError;
+            _noticeUntil = Raylib.GetTime() + (isError ? 8 : 3);
+        }
+
+        void DrawNotice()
+        {
+            if (_notice == null || Raylib.GetTime() > _noticeUntil)
+                return;
+            const float size = 18;
+            float y = Raylib.GetScreenHeight() - 30 - size - 8;
+            float w = Raylib.MeasureTextEx(GameFont.Bold, _notice, size, 0).X;
+            Raylib.DrawRectangleRounded(new Raylib_cs.Rectangle(4, y - 4, w + 12, size + 8), 0.3f, 4, new Color(20, 20, 24, 190));
+            GameFont.DrawBold(_notice, 10, y, size, _noticeIsError ? new Color(255, 120, 110, 255) : new Color(140, 230, 160, 255));
         }
 
         void ToggleSlowMode()

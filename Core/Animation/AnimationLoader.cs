@@ -40,6 +40,59 @@ namespace Vector.Core.Animation
             ParseAnimations();
         }
 
+        /// <summary>
+        /// Reload Moves (debug panel): moves.xml and every move's .bin read again from the disk, so edited moves and
+        /// new .bin files are used without restarting the game. When moves.xml cannot be read (a typo while
+        /// editing), the moves loaded before are kept and the error is returned.
+        /// </summary>
+        public bool ReloadMoves(out string? error)
+        {
+            var animations = new Dictionary<string, AnimationInfo>(Animations.Animation);
+            var groups = new Dictionary<string, AnimationGroup>(AnimationGroup.Groups);
+            var reactions = new List<AnimationReaction>(AnimationReaction.Reactions);
+            var tricks = new List<AnimationTrickInfo>(AnimationTrickInfo.TricksLoaded);
+            try
+            {
+                // Read on its own first: a broken file reports its line and column instead of failing half-way.
+                // Same reading as the game's (the text, so the file's encoding declaration is not used).
+                string text = File.ReadAllText(PathCase.Resolve(Path.Combine(_xmlPath, "moves.xml")));
+                using var reader = XmlReader.Create(new StringReader(text), new XmlReaderSettings { IgnoreComments = true });
+                new XmlDocument().Load(reader);
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+            try
+            {
+                ReloadAnimations();
+                PathCase.Clear(); // a .bin added since the start is found whatever its casing
+                Parallel.ForEach(Animations.ToList(), animation => animation.LoadBin());
+                AnimationReaction.MovesVersion++;
+                error = null;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Restore(Animations.Animation, animations);
+                Restore(AnimationGroup.Groups, groups);
+                AnimationReaction.Reactions.Clear();
+                AnimationReaction.Reactions.AddRange(reactions);
+                AnimationTrickInfo.TricksLoaded.Clear();
+                AnimationTrickInfo.TricksLoaded.AddRange(tricks);
+                error = ex.Message;
+                return false;
+            }
+        }
+
+        private static void Restore<TValue>(Dictionary<string, TValue> target, Dictionary<string, TValue> saved)
+        {
+            target.Clear();
+            foreach (var (key, value) in saved)
+                target[key] = value;
+        }
+
         public void ParseAnimations()
         {
             Dictionary<string, XmlNode> dictionary = new Dictionary<string, XmlNode>();

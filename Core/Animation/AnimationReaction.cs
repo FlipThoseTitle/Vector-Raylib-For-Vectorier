@@ -12,6 +12,10 @@ namespace Vector.Core.Animation
         public const string NameDeath = "Death";
 
         private AnimationInfo _info;
+        private int _infoVersion;
+
+        /// <summary>Raised by each Reload Moves: reactions look their move up again.</summary>
+        public static int MovesVersion;
 
         private readonly List<int> _slopeH = new List<int>();
 
@@ -162,9 +166,11 @@ namespace Vector.Core.Animation
         {
             get
             {
-                if (_info == null)
+                // After Reload Moves the move is looked up again (reactions of the level, e.g. a spawn's, outlive it).
+                if (_info == null || _infoVersion != MovesVersion)
                 {
                     _info = Animations.Animation[Name];
+                    _infoVersion = MovesVersion;
                 }
                 return _info;
             }

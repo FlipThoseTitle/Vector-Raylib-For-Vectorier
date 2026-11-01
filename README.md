@@ -44,3 +44,4 @@ Text uses Play (Regular and Bold), Vector's own font, built into the executable.
 - M - Mutes / unmutes the music
 - R - Restart the level
 - H - Hides the debug UI
+- Reload Moves (button, no key) - Reads moves.xml and the animation .bin files again, then restarts the level

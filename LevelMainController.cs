@@ -1,3 +1,4 @@
+using Vector.Core.Animation;
 using Vector.Core;
 using Vector.Core.Camera;
 using Vector.Core.Controllers;
@@ -402,6 +403,26 @@ public class LevelMainController
     public void ReloadButton()
     {
         Reload();
+    }
+
+    /// <summary>
+    /// Reload Moves (debug panel, no key): moves.xml and the animation .bin files are read again, then the level
+    /// restarts with them. For modders changing moves without restarting the game.
+    /// </summary>
+    public void ReloadMovesButton()
+    {
+        Console.WriteLine("Reload moves");
+        if (!AnimationLoader.Current.ReloadMoves(out string? error))
+        {
+            Console.WriteLine("moves.xml could not be reloaded: " + error);
+            Vector.ShowNotice("moves.xml could not be reloaded (the previous moves are kept): " + error, true);
+            return;
+        }
+        // Trick areas load their trick's frames when the level is built: again for the new moves.
+        foreach (var area in _Location.Sets.AllRunners.OfType<AreaRunner>())
+            area.LoadBinaryIfTrick();
+        Reload();
+        Vector.ShowNotice($"Moves reloaded ({Animations.Animation.Count} moves)", false);
     }
 
     protected void Reload()

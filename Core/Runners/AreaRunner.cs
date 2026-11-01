@@ -44,7 +44,8 @@ namespace Vector.Core.Runners
             LoadBinaryIfTrick();
         }
 
-        private void LoadBinaryIfTrick()
+        /// <summary>A Trick area's move is loaded with the level (and again after Reload Moves).</summary>
+        public void LoadBinaryIfTrick()
         {
             if (Animations.Animation.ContainsKey(Name.Replace("Trigger", "")))
             {
