@@ -101,7 +101,24 @@ namespace Vector.Core.Controllers
             }
         }
 
+        /// <summary>
+        /// Safe: written on the playing reaction, it overrides the intervals' Safe; otherwise any active interval
+        /// with Safe="1" makes it safe.
+        /// </summary>
         public bool SafeInterval
+        {
+            get
+            {
+                if (PlayingReaction?.SafeAttribute is bool reactionSafe)
+                {
+                    return reactionSafe;
+                }
+                return IntervalSafe;
+            }
+        }
+
+        /// <summary>Safe="1" on an active interval.</summary>
+        public bool IntervalSafe
         {
             get
             {
@@ -117,6 +134,57 @@ namespace Vector.Core.Controllers
                 return false;
             }
         }
+
+        /// <summary>
+        /// The reaction whose move is playing (null when the move was started another way, e.g. by a trigger).
+        /// </summary>
+        public AnimationReaction PlayingReaction => _playingReaction != null && Animation != null && _playingReaction.Name == Animation.Name ? _playingReaction : null;
+
+        private AnimationReaction _playingReaction;
+
+        /// <summary>SafeH / SafeV of the playing reaction when it writes them, else of an active interval (null: neither).</summary>
+        public bool? SafeHSetting => PlayingReaction?.SafeHAttribute ?? IntervalSafeSide(true);
+
+        public bool? SafeVSetting => PlayingReaction?.SafeVAttribute ?? IntervalSafeSide(false);
+
+        private bool? IntervalSafeSide(bool horizontal)
+        {
+            if (Animation == null)
+            {
+                return null;
+            }
+            bool? result = null;
+            foreach (var interval in Intervals)
+            {
+                var value = horizontal ? interval.SafeH : interval.SafeV;
+                if (value == true)
+                {
+                    return true;
+                }
+                result ??= value;
+            }
+            return result;
+        }
+
+        /// <summary>Effective SafeH / SafeV: the reaction's or interval's setting, else the detector's (set by the last reaction).</summary>
+        public bool IsSafeH => SafeHSetting ?? (_ModelObject.DetectorHorizontalLine?.Safe ?? false);
+
+        public bool IsSafeV => SafeVSetting ?? (_ModelObject.DetectorVerticalLine?.Safe ?? false);
+
+        /// <summary>The platform the model is bound to (it carries the model when it moves); null: none.</summary>
+        public QuadRunner BoundPlatform => _VelocityQuad;
+
+        /// <summary>The platform movement applied to the model at the last tick.</summary>
+        public Vector3? PlatformSpeed => _SpeedTween;
+
+        /// <summary>NoPlatformBoundX / Y of the active intervals (null: none).</summary>
+        public Vector2? NoPlatformBound => Animation == null ? null : PlatformBound;
+
+        /// <summary>
+        /// Where the COM is expected to go during the playing move: its position in each remaining animation frame,
+        /// with the move's VelocityX / VelocityY / Gravity (Binding) applied, as computed when the move started.
+        /// </summary>
+        public List<Vector3> PredictedPath { get; } = new List<Vector3>();
 
         public bool LockInterval
         {
@@ -237,6 +305,7 @@ namespace Vector.Core.Controllers
             VelocityPoint();
             MirrorNode("NHeel_1", "NHeel_2");
             SetNodesNewPosition();
+            RecordPredictedPath();
             if (_ModelObject.DetectorVerticalLine != null)
             {
                 _ModelObject.DetectorVerticalLine.Delta(info.DeltaDetectorV);
@@ -295,6 +364,25 @@ namespace Vector.Core.Controllers
                 }
             }
             _NodesNewPosition = null;
+        }
+
+        /// <summary>The COM's position in each frame of the move as it will play (Moves Information, Physics).</summary>
+        private void RecordPredictedPath()
+        {
+            PredictedPath.Clear();
+            var com = _ModelObject.CenterOfMassNode;
+            if (com == null)
+            {
+                return;
+            }
+            for (int i = 2; i < _Frames.Size; i++)
+            {
+                var frame = _Frames.GetFrame(i);
+                if (frame != null && com.Id < frame.Count && frame[com.Id].HasValue)
+                {
+                    PredictedPath.Add(frame[com.Id].Value);
+                }
+            }
         }
 
         public void Clear()
@@ -365,6 +453,7 @@ namespace Vector.Core.Controllers
             {
                 _NodesNewPosition = reaction.NodesWi;
             }
+            _playingReaction = reaction;
             _ModelObject.DetectorHorizontalLine.Safe = reaction.SafeHorizontal;
             _ModelObject.DetectorVerticalLine.Safe = reaction.SafeVertical;
             if (_Model.Type != ModelType.Human)
@@ -523,6 +612,7 @@ namespace Vector.Core.Controllers
             if (speed.X != 0f || speed.Y != 0f)
             {
                 VelocityVector(speed, _TargetPointOld);
+                VelocityVector(speed, PredictedPath); // the moving platform carries the predicted path too
                 VelocityFrames(speed);
                 VelocityBuffer(speed);
                 VelocityNodes(speed);

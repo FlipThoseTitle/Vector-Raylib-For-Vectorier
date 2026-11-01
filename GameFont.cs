@@ -1,66 +1,56 @@
 using Raylib_cs;
 using System.Numerics;
+using System.Reflection;
 
 namespace Vector
 {
     /// <summary>
-    /// The game's UI font: Arial, loaded from the system (Windows, macOS, Linux). Linux usually has no Arial; the
-    /// metric-compatible Liberation Sans / Arimo is used then, and raylib's default font as the last resort.
+    /// The game's font: Play, Vector's own font (Unity's Resources/fonts), built into the executable. Play Regular
+    /// is used for the debug UI, Play Bold for the game's own texts (trigger messages, tutorial hints), as in Unity.
+    /// Latin, Latin-1 and Cyrillic characters are loaded (Play covers both alphabets).
     /// </summary>
     public static class GameFont
     {
         private const int BaseSize = 64;
 
-        private static Font? _font;
+        private static Font? _regular;
+        private static Font? _bold;
 
-        public static Font Font => _font ??= Load();
+        /// <summary>Play Regular.</summary>
+        public static Font Font => _regular ??= Load("Play-Regular.ttf");
 
-        private static IEnumerable<string> Candidates()
+        /// <summary>Play Bold.</summary>
+        public static Font Bold => _bold ??= Load("Play-Bold.ttf");
+
+        private static int[] Codepoints()
         {
-            if (OperatingSystem.IsWindows())
-            {
-                string fonts = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
-                yield return Path.Combine(fonts, "arial.ttf");
-                yield return @"C:\Windows\Fonts\arial.ttf";
-            }
-            else if (OperatingSystem.IsMacOS())
-            {
-                yield return "/System/Library/Fonts/Supplemental/Arial.ttf";
-                yield return "/Library/Fonts/Arial.ttf";
-                yield return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Library/Fonts/Arial.ttf");
-            }
-            else
-            {
-                yield return "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf";
-                yield return "/usr/share/fonts/truetype/msttcorefonts/arial.ttf";
-                yield return "/usr/share/fonts/msttcore/arial.ttf";
-                yield return "/usr/share/fonts/TTF/arial.ttf";
-                yield return "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf";
-                yield return "/usr/share/fonts/liberation-sans/LiberationSans-Regular.ttf";
-                yield return "/usr/share/fonts/TTF/LiberationSans-Regular.ttf";
-                yield return "/usr/share/fonts/truetype/croscore/Arimo-Regular.ttf";
-            }
-            // A copy shipped next to the executable wins on any system that lacks it.
-            yield return Path.Combine(VectorPaths.AppFolder, "arial.ttf");
+            var list = new List<int>();
+            for (int c = 32; c < 127; c++) list.Add(c);         // ASCII
+            for (int c = 160; c < 384; c++) list.Add(c);        // Latin-1, Latin Extended-A
+            for (int c = 0x400; c < 0x460; c++) list.Add(c);    // Cyrillic
+            list.AddRange(new[] { 0x2013, 0x2014, 0x2018, 0x2019, 0x201C, 0x201D, 0x2026, 0x2022, 0x2116 });
+            return list.ToArray();
         }
 
-        private static Font Load()
+        private static Font Load(string name)
         {
-            foreach (var path in Candidates())
-            {
-                if (!File.Exists(path))
-                    continue;
-                var font = Raylib.LoadFontEx(path, BaseSize, null, 0);
-                if (font.Texture.Id != 0)
-                {
-                    Raylib.SetTextureFilter(font.Texture, TextureFilter.Bilinear);
-                    return font;
-                }
-            }
-            return Raylib.GetFontDefault();
+            using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Vector.UI.Fonts." + name);
+            if (stream == null)
+                return Raylib.GetFontDefault();
+            using var memory = new MemoryStream();
+            stream.CopyTo(memory);
+            var codepoints = Codepoints();
+            var font = Raylib.LoadFontFromMemory(".ttf", memory.ToArray(), BaseSize, codepoints, codepoints.Length);
+            if (font.Texture.Id == 0)
+                return Raylib.GetFontDefault();
+            Raylib.SetTextureFilter(font.Texture, TextureFilter.Bilinear);
+            return font;
         }
 
         public static void Draw(string text, float x, float y, float size, Color color) =>
             Raylib.DrawTextEx(Font, text, new Vector2(x, y), size, size / 10f, color);
+
+        public static void DrawBold(string text, float x, float y, float size, Color color) =>
+            Raylib.DrawTextEx(Bold, text, new Vector2(x, y), size, 0, color);
     }
 }

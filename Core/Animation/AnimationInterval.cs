@@ -26,6 +26,11 @@ namespace Vector.Core.Animation
             private set;
         }
 
+        /// <summary>SafeH / SafeV written on the interval (null: not written).</summary>
+        public bool? SafeH { get; private set; }
+
+        public bool? SafeV { get; private set; }
+
         public bool IsLock
         {
             get;
@@ -156,6 +161,8 @@ namespace Vector.Core.Animation
             EndFrame = node.Attributes["End"].ParseInt();
             IsSafe = node.Attributes["Safe"].ParseBool();
             IsLock = node.Attributes["Lock"].ParseBool();
+            SafeH = node.Attributes["SafeH"] == null ? null : node.Attributes["SafeH"].ParseBool();
+            SafeV = node.Attributes["SafeV"] == null ? null : node.Attributes["SafeV"].ParseBool();
             IsAction = node.Attributes["Action"] != null ? true : false;
             NoPlatformBound.X = node.Attributes["NoPlatformBoundX"].ParseFloat();
             NoPlatformBound.Y = node.Attributes["NoPlatformBoundY"].ParseFloat();

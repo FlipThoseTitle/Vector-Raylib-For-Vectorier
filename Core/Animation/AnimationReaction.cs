@@ -100,6 +100,13 @@ namespace Vector.Core.Animation
             set;
         }
 
+        /// <summary>Safe / SafeH / SafeV written on the reaction (null: not written, the interval's value applies).</summary>
+        public bool? SafeAttribute { get; }
+
+        public bool? SafeHAttribute { get; }
+
+        public bool? SafeVAttribute { get; }
+
         public bool SafeHorizontal
         {
             get;
@@ -216,6 +223,9 @@ namespace Vector.Core.Animation
             CornerClingH = node.Attributes["CornerClingH"].ParseInt(-1);
             SafeHorizontal = node.Attributes["SafeH"].ParseBool();
             SafeVertical = node.Attributes["SafeV"].ParseBool();
+            SafeAttribute = node.Attributes["Safe"] == null ? null : node.Attributes["Safe"].ParseBool();
+            SafeHAttribute = node.Attributes["SafeH"] == null ? null : SafeHorizontal;
+            SafeVAttribute = node.Attributes["SafeV"] == null ? null : SafeVertical;
             Reverse = node.Attributes["Reverse"].ParseBool();
             Mirror = node.Attributes["Mirror"].ParseBool();
             OnEndTrigger = node.Attributes["OnEndTrigger"].ParseBool();

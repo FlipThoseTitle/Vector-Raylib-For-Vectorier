@@ -257,7 +257,7 @@ namespace Vector.Core.Models
             var platform = @event.Data.Platform;
             DetectorLine detectorVerticalLine = _ModelObject.DetectorVerticalLine;
             DetectorLine detectorHorizontalLine = _ModelObject.DetectorHorizontalLine;
-            if ((detectorVerticalLine.Platform != platform || !detectorVerticalLine.Safe) && (detectorHorizontalLine.Platform != platform || !detectorHorizontalLine.Safe) && !SafeInterval && !_controllerAnimations.CheckCollision(@event.Data, AnimationEventCollision.Type.Quad))
+            if ((detectorVerticalLine.Platform != platform || !_controllerAnimations.IsSafeV) && (detectorHorizontalLine.Platform != platform || !_controllerAnimations.IsSafeH) && !SafeInterval && !_controllerAnimations.CheckCollision(@event.Data, AnimationEventCollision.Type.Quad))
             {
                 StartPhysics();
                 if (IsBot)

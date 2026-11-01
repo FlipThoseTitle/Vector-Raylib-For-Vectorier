@@ -39,6 +39,8 @@ namespace Vector
 
         public static string Models => Path.Combine(Resources, "models");
 
+        public static string Localization => Path.Combine(Resources, "localization");
+
         public static string? ProjectName { get; private set; }
 
         private static string FirstExisting(string preferred, string fallback) =>

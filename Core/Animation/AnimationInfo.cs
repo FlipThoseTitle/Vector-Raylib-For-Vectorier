@@ -152,6 +152,15 @@ namespace Vector.Core.Animation
             set => _Loop = value;
         }
 
+        /// <summary>Which physics attributes moves.xml sets on this move (Moves Information, Physics).</summary>
+        public bool HasBinding { get; }
+
+        public bool HasGravity { get; }
+
+        public bool HasVelocityX { get; }
+
+        public bool HasVelocityY { get; }
+
         public AnimationInfo(XmlNode node)
         {
             Velocity = new Vector3();
@@ -171,6 +180,10 @@ namespace Vector.Core.Animation
             SubType = node.Attributes["SubType"].ParseInt();
             Priority = node.Attributes["Priority"].ParseInt(1);
             Binding = node.Attributes["Binding"].ParseBool();
+            HasBinding = node.Attributes["Binding"] != null;
+            HasGravity = node.Attributes["Gravity"] != null;
+            HasVelocityX = node.Attributes["VelocityX"] != null;
+            HasVelocityY = node.Attributes["VelocityY"] != null;
             DeltaDetectorH = node.Attributes["DeltaDetectorH"].ParseFloat();
             DeltaDetectorV = node.Attributes["DeltaDetectorV"].ParseFloat();
             Mirror = node.Attributes["Mirror"].ParseBool(true);

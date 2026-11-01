@@ -39,6 +39,13 @@
     </Content>
   </ItemGroup>
 
+  <!-- Tutorial hint images and fonts from Vector, inside the executable. -->
+  <ItemGroup>
+    <EmbeddedResource Include="UI\*.png" LogicalName="Vector.UI.%(Filename)%(Extension)" />
+    <!-- Play (Regular, Bold): Vector's font, used for every text of the game. -->
+    <EmbeddedResource Include="UI\Fonts\*.ttf" LogicalName="Vector.UI.Fonts.%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Remove="1.ico" />
     <Resource Include="1.ico" />

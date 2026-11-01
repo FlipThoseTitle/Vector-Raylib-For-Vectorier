@@ -100,14 +100,22 @@ namespace Vector
                 if (reaction.XmlAttributes.Length > 0)
                     lines.Add((reaction.XmlAttributes, Dim, 30));
 
+                // Conditions of the same kind on the same corner all have to hold, so they are one condition:
+                // <DeltaY Max="0" Corner="0"/> + <DeltaY Min="-15" Corner="0"/> = <DeltaY Min="-15" Max="0" Corner="0"/>.
+                // Each XML line is listed (in the merged condition's color) and the merged one is drawn once.
                 int index = 0;
                 foreach (var (deltas, type) in new[] { (reaction.DeltasH, 'H'), (reaction.DeltasV, 'V'), (reaction.DeltasC, 'C') })
                 {
-                    foreach (var delta in deltas.Items)
+                    foreach (var same in deltas.Items.GroupBy(d => (d.Name, d.Corner)))
                     {
                         var color = Palette[index++ % Palette.Length];
-                        lines.Add((ConditionXml(delta, type) + ValueText(trace, delta, type), color, 30));
-                        conditions.Add((delta, type, color));
+                        var parts = same.ToList();
+                        foreach (var delta in parts)
+                            lines.Add((ConditionXml(delta, type) + ValueText(trace, delta, type), color, 30));
+                        var merged = parts.Count == 1 ? parts[0] : Merge(parts);
+                        if (parts.Count > 1)
+                            lines.Add(($"= {ConditionXml(merged, type)}   combined: {Measurement(merged)}", color, 44));
+                        conditions.Add((merged, type, color));
                     }
                 }
                 if (index == 0)
@@ -121,7 +129,7 @@ namespace Vector
 
         // ================= TEXT ================= //
 
-        static string F(double v) => Math.Round(v, 1).ToString(CultureInfo.InvariantCulture);
+        internal static string F(double v) => Math.Round(v, 1).ToString(CultureInfo.InvariantCulture);
 
         static string EventText(ReactionTrace trace)
         {
@@ -180,11 +188,31 @@ namespace Vector
             return $"   = {F(value)}";
         }
 
+        /// <summary>
+        /// One condition from several of the same kind on the same corner: the highest Min and the lowest Max (all of
+        /// them have to hold).
+        /// </summary>
+        static AnimationDelta Merge(List<AnimationDelta> parts)
+        {
+            float min = float.NaN, max = float.NaN;
+            foreach (var d in parts)
+            {
+                if (!float.IsNaN(d.Value.X))
+                    min = float.IsNaN(min) ? d.Value.X : MathF.Max(min, d.Value.X);
+                if (!float.IsNaN(d.Value.Y))
+                    max = float.IsNaN(max) ? d.Value.Y : MathF.Min(max, d.Value.Y);
+            }
+            var first = parts[0];
+            return new AnimationDelta(first.Name, first.Type, new Vector2(min, max), first.Corner) { XmlName = first.XmlName };
+        }
+
         static string Measurement(AnimationDelta delta)
         {
             float min = delta.Value.X, max = delta.Value.Y;
+            if (!float.IsNaN(min) && !float.IsNaN(max) && min > max)
+                return $"Never valid: Min {F(min)} > Max {F(max)}";
             if (!float.IsNaN(min) && !float.IsNaN(max))
-                return $"Range {F(min)}-{F(max)}";
+                return min < 0 || max < 0 ? $"Range {F(min)} to {F(max)}" : $"Range {F(min)}-{F(max)}";
             if (!float.IsNaN(min))
                 return $"Min {F(min)}";
             if (!float.IsNaN(max))
@@ -284,9 +312,9 @@ namespace Vector
 
         // ================= DRAWING HELPERS ================= //
 
-        static Color Fade(Color c, float alpha) => new(c.R, c.G, c.B, (byte)Math.Clamp(alpha * 255, 0, 255));
+        internal static Color Fade(Color c, float alpha) => new(c.R, c.G, c.B, (byte)Math.Clamp(alpha * 255, 0, 255));
 
-        static float TextWidth(string text) => Raylib.MeasureTextEx(GameFont.Font, text, FontSize, FontSize / 10f).X;
+        internal static float TextWidth(string text) => Raylib.MeasureTextEx(GameFont.Font, text, FontSize, FontSize / 10f).X;
 
         /// <summary>
         /// The condition's name (bold, in its color) with its measurement under it (white), kept together: when the
@@ -311,7 +339,7 @@ namespace Vector
             DrawOutlined(measurement, new Vector2(measureX, y + LineHeight), Text, bold: false);
         }
 
-        static void DrawOutlined(string text, Vector2 at, Color color, bool bold)
+        internal static void DrawOutlined(string text, Vector2 at, Color color, bool bold)
         {
             at = new Vector2(MathF.Round(at.X), MathF.Round(at.Y));
             if (at.X > Raylib.GetScreenWidth() || at.Y > Raylib.GetScreenHeight() || at.X + TextWidth(text) < 0 || at.Y + LineHeight < 0)
@@ -323,7 +351,7 @@ namespace Vector
                 GameFont.Draw(text, at.X + 0.6f, at.Y, FontSize, color);
         }
 
-        static void Dashed(Vector2 a, Vector2 b, Color color)
+        internal static void Dashed(Vector2 a, Vector2 b, Color color)
         {
             float length = Vector2.Distance(a, b);
             if (length < 0.5f)
@@ -333,7 +361,7 @@ namespace Vector
                 Raylib.DrawLineEx(a + dir * d, a + dir * MathF.Min(d + 5, length), 1.5f, Fade(color, 0.8f));
         }
 
-        static void DrawPanel(List<(string text, Color color, float indent)> lines)
+        internal static void DrawPanel(List<(string text, Color color, float indent)> lines)
         {
             const float x = 10, y = 26, pad = 6;
             float width = 0;

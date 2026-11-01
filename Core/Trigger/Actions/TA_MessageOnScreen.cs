@@ -48,7 +48,7 @@ namespace Vector.Core.Trigger.Actions
         public override void Activate(ref bool p_isRunNext)
         {
             p_isRunNext = true;
-            //LevelMainController.current.levelSceneController.MessageOnScreen(_TextVariable.ValueString, _TimeVariable.ValueInt, _Color, _AppearAnimation, _DisappearAnimation);
+            GameplayUI.ShowMessage(_TextVariable.ValueString, _TimeVariable.ValueInt, _Color);
         }
 
         public override TriggerAction Copy()

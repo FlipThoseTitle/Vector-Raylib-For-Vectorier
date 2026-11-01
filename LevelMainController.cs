@@ -228,6 +228,7 @@ public class LevelMainController
     public void TutorialAreaActivate(TutorialAreaRunner area)
     {
         slowModeFrames = 10;
+        GameplayUI.ShowTutorial(area.Key, area.Description);
     }
 
     public void TutorialLockGame()
@@ -239,6 +240,7 @@ public class LevelMainController
     {
         _tutorialPause = false;
         slowModeFrames = 1;
+        GameplayUI.HideTutorial();
     }
 
     public bool HasCurrentLocationEverBeenCompleted()
@@ -406,6 +408,7 @@ public class LevelMainController
     {
         Console.WriteLine("Reload");
         _reloadDelay = -1f; // a manual restart (R) during the delay cancels the automatic one
+        GameplayUI.Reset();
         _Location.Reload();
         foreach (var model in _Location.Models)
         {

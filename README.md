@@ -23,8 +23,7 @@ VS Code tasks (Terminal › Run Task): `Publish Windows (win-x64)`, `Publish Lin
 Each publishes a self-contained Release build to `publish/<runtime>/`. Copy that folder's content to
 `Data/Game/<runtime>/` of Vectorier.
 
-Text uses Arial from the system (Linux: Liberation Sans / Arimo when Arial is not installed; an `arial.ttf` next to
-the executable also works).
+Text uses Play (Regular and Bold), Vector's own font, built into the executable.
 
 ## Controls
 

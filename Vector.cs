@@ -139,11 +139,11 @@ namespace Vector
         public static bool ShowGrid;
 
         /// <summary>I: Moves Information overlay (see MoveConditionsOverlay).</summary>
-        public enum MovesInfoMode { None, ReactionCondition }
+        public enum MovesInfoMode { None, ReactionCondition, Physics, Safe, PlatformBound }
 
         public static MovesInfoMode MovesInfo;
 
-        static readonly string[] MovesInfoNames = { "None", "Reaction Condition" };
+        static readonly string[] MovesInfoNames = { "None", "Reaction", "Physics", "Safe", "Platform Bound" };
         public static bool RenderEdges;
         public static bool RenderDetectors;
         public static bool RenderBoxes;
@@ -168,6 +168,7 @@ namespace Vector
             Raylib.SetTraceLogLevel(TraceLogLevel.Warning);
             Raylib.InitWindow(width, height, name);
             Raylib.InitAudioDevice();
+            Raylib.SetMasterVolume(0.5f); // the game is too loud at full volume
 
             Raylib.SetExitKey(KeyboardKey.Null);
 
@@ -313,6 +314,7 @@ namespace Vector
                     // The delay before the automatic restart (Win / Loss / Death) only runs with the game: Esc
                     // freezes it, unpausing resumes it.
                     LevelMainController.current.TickReloadDelay(TickSeconds);
+                    GameplayUI.Tick();
                 }
                 stepOneFrame = false;
 
@@ -332,23 +334,40 @@ namespace Vector
                         animation = player.ControllerAnimations.CurrentFrame + " - " + player.ControllerAnimations.Animation.Name;
                     }
 
+                    // The game's own UI: trigger messages and tutorial hints.
+                    GameplayUI.Draw();
+
                     if (ShowGrid)
                         DrawGrid();
 
                     // Names and outlines of the debug shapes shown (screen space, like the editor's labels).
                     DrawDebugLabels();
 
-                    if (MovesInfo == MovesInfoMode.ReactionCondition)
-                        MoveConditionsOverlay.Draw(Camera);
+                    switch (MovesInfo)
+                    {
+                        case MovesInfoMode.ReactionCondition:
+                            MoveConditionsOverlay.Draw(Camera);
+                            MovesInfoOverlays.DrawVelosity();
+                            break;
+                        case MovesInfoMode.Physics:
+                            MovesInfoOverlays.DrawPhysics(Camera);
+                            break;
+                        case MovesInfoMode.Safe:
+                            MovesInfoOverlays.DrawSafe(Camera);
+                            break;
+                        case MovesInfoMode.PlatformBound:
+                            MovesInfoOverlays.DrawPlatformBound(Camera);
+                            break;
+                    }
 
                     if (!hideDebugUi)
                     {
-                        GameFont.Draw(animation, 0, Raylib.GetScreenHeight() - 30, 30, Color.White);
+                        GameFont.DrawBold(animation, 0, Raylib.GetScreenHeight() - 30, 30, Color.White);
 
                         DrawButtons();
 
                         // Same place and size as raylib's FPS counter, in Arial and always white.
-                        GameFont.Draw($"{Raylib.GetFPS()} FPS", 0, 0, 20, Color.White);
+                        GameFont.DrawBold($"{Raylib.GetFPS()} FPS", 0, 0, 20, Color.White);
                     }
                 }
                 Raylib.EndDrawing();
@@ -384,7 +403,7 @@ namespace Vector
             Add(KeyboardKey.D, "D", "Detectors", () => RenderDetectors = !RenderDetectors, () => RenderDetectors);
             Add(KeyboardKey.B, "B", "Bounding", () => RenderBoxes = !RenderBoxes, () => RenderBoxes);
             Add(KeyboardKey.I, "I", "Moves Info", () => MovesInfo = (MovesInfoMode)(((int)MovesInfo + 1) % MovesInfoNames.Length), () => MovesInfo != MovesInfoMode.None);
-            Buttons[^1].DynamicText = () => "Moves Info: " + (MovesInfo == MovesInfoMode.None ? "None" : "Reaction");
+            Buttons[^1].DynamicText = () => "Moves: " + MovesInfoNames[(int)MovesInfo];
             Add(KeyboardKey.G, "G", "Center Line", () => ShowGrid = !ShowGrid, () => ShowGrid);
 
             // Playback.
