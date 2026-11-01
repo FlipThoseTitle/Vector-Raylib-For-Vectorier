@@ -40,14 +40,8 @@ the executable also works).
 - E - Shows model edges
 - D - Shows model detectors
 - B - Shows model Bounding box and Collision box if it has
-- I - Shows the conditions of the moves of the current interval (Width, Height, DeltaX, DeltaY, sides...) on the
-  level, relative to the platform under the detector, with a list of every move and whether each condition holds now
+- I - Shows the moves information
 - G - Shows a cross line through the screen center
 - M - Mutes / unmutes the music
 - R - Restart the level
 - H - Hides the debug UI
-
-The automatic restart after a win, a loss or a death waits while the game is paused.
-
-The game logic runs at a fixed 60 updates per second: when the PC cannot draw 60 frames per second, the missed
-updates are caught up (down to 15 FPS), so the game keeps its normal speed.
