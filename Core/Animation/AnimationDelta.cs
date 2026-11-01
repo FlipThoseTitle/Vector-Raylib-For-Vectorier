@@ -9,6 +9,9 @@ namespace Vector.Core.Animation
         /// <summary>The corner as written in moves.xml (0 top-left, 1 top-right, 2 bottom-right, 3 bottom-left; -1 none).</summary>
         public int Corner => _corner;
 
+        /// <summary>The element name in moves.xml (Width, DeltaY, VelosityX...).</summary>
+        public string XmlName { get; init; } = string.Empty;
+
         public Vector2 Value
         {
             get;

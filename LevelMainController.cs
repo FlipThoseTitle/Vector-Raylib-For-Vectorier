@@ -407,6 +407,10 @@ public class LevelMainController
         Console.WriteLine("Reload");
         _reloadDelay = -1f; // a manual restart (R) during the delay cancels the automatic one
         _Location.Reload();
+        foreach (var model in _Location.Models)
+        {
+            model.ControllerAnimations?.ClearTrace(); // Moves Information: nothing played yet
+        }
         TutorialUnLockGame();
         InitCoins();
         _Camera.Reset();

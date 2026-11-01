@@ -138,8 +138,12 @@ namespace Vector
         /// <summary>G: a cross line through the screen center.</summary>
         public static bool ShowGrid;
 
-        /// <summary>I: the conditions of the moves of the current interval (see MoveConditionsOverlay).</summary>
-        public static bool ShowMoveConditions;
+        /// <summary>I: Moves Information overlay (see MoveConditionsOverlay).</summary>
+        public enum MovesInfoMode { None, ReactionCondition }
+
+        public static MovesInfoMode MovesInfo;
+
+        static readonly string[] MovesInfoNames = { "None", "Reaction Condition" };
         public static bool RenderEdges;
         public static bool RenderDetectors;
         public static bool RenderBoxes;
@@ -334,7 +338,7 @@ namespace Vector
                     // Names and outlines of the debug shapes shown (screen space, like the editor's labels).
                     DrawDebugLabels();
 
-                    if (ShowMoveConditions)
+                    if (MovesInfo == MovesInfoMode.ReactionCondition)
                         MoveConditionsOverlay.Draw(Camera);
 
                     if (!hideDebugUi)
@@ -358,7 +362,7 @@ namespace Vector
             Buttons.Clear();
             ButtonKeys.Clear();
 
-            const float width = 170, gap = 4, margin = 10, sectionGap = 12;
+            const float width = 200, gap = 4, margin = 10, sectionGap = 12;
             float x = ScreenWidth - width - margin;
             float y = margin;
 
@@ -379,7 +383,8 @@ namespace Vector
             Add(KeyboardKey.E, "E", "Edges", () => RenderEdges = !RenderEdges, () => RenderEdges);
             Add(KeyboardKey.D, "D", "Detectors", () => RenderDetectors = !RenderDetectors, () => RenderDetectors);
             Add(KeyboardKey.B, "B", "Bounding", () => RenderBoxes = !RenderBoxes, () => RenderBoxes);
-            Add(KeyboardKey.I, "I", "Move Conditions", () => ShowMoveConditions = !ShowMoveConditions, () => ShowMoveConditions);
+            Add(KeyboardKey.I, "I", "Moves Info", () => MovesInfo = (MovesInfoMode)(((int)MovesInfo + 1) % MovesInfoNames.Length), () => MovesInfo != MovesInfoMode.None);
+            Buttons[^1].DynamicText = () => "Moves Info: " + (MovesInfo == MovesInfoMode.None ? "None" : "Reaction");
             Add(KeyboardKey.G, "G", "Center Line", () => ShowGrid = !ShowGrid, () => ShowGrid);
 
             // Playback.
@@ -818,7 +823,7 @@ namespace Vector
                        $"RenderAreas={RenderAreas}\n" +
                        $"NodeMode={(int)NodeMode}\n" +
                        $"ShowGrid={ShowGrid}\n" +
-                       $"ShowMoveConditions={ShowMoveConditions}\n" +
+                       $"MovesInfo={(int)MovesInfo}\n" +
                        $"MusicMuted={SoundsManager.MusicMuted}\n" +
                        $"RenderEdges={RenderEdges}\n" +
                        $"RenderDetectors={RenderDetectors}\n" +
@@ -861,8 +866,9 @@ namespace Vector
                             case "ShowGrid":
                                 ShowGrid = boolValue;
                                 break;
-                            case "ShowMoveConditions":
-                                ShowMoveConditions = boolValue;
+                            case "MovesInfo":
+                                if (int.TryParse(value, out int movesInfo))
+                                    MovesInfo = (MovesInfoMode)Math.Clamp(movesInfo, 0, MovesInfoNames.Length - 1);
                                 break;
                             case "MusicMuted":
                                 SoundsManager.MusicMuted = boolValue;

@@ -1,53 +1,57 @@
 using Raylib_cs;
+using System.Globalization;
 using System.Numerics;
 using Vector.Core.Animation;
-using Vector.Core.Animation.Events;
-using Vector.Core.Detector;
 using Vector.Core.Location;
-using Vector.Core.Models;
 using Vector.Core.Runners;
 
 namespace Vector
 {
     /// <summary>
-    /// I key: shows the conditions of the moves the player can switch to right now, i.e. the reactions of every event
-    /// (Keys, OnEnd, DetectorH, DetectorV, OnCollision, OnFrame, OnArea/OnTrigger) of the intervals active at the
-    /// current frame, groups included (Groups="RunGroup").
+    /// Moves Information (I key), "Reaction Condition" mode. Only what applies right now is shown, step by step:
     ///
-    /// On the level each H / V condition is drawn relative to the platform under its detector, the platform that
-    /// would trigger it:
-    ///  - DeltaX / DeltaY: the zone the detector has to be in, measured from the condition's corner of the platform
-    ///    (0 top-left, 1 top-right, 2 bottom-right, 3 bottom-left; mirrored when the player faces left), with the
-    ///    Min / Max written on its lines;
-    ///  - Width / Height: a ruler along the platform's top / left edge with the Min / Max marks;
-    ///  - Sides: the allowed sides (0 top, 1 right, 2 bottom, 3 left) of the detector event's platform.
-    /// With no platform under the detector, the DeltaX / DeltaY zone is drawn dashed around the detector instead: the
-    /// zone a platform's corner has to be in for the condition to hold.
+    ///  1. Active interval: the intervals of the playing move whose frame range holds the current frame and that use
+    ///     EventGroups (Groups="RunGroup"), as Start / End / Group.
+    ///  2. Triggered event: the event that made the playing move start (Keys, DetectorH / DetectorV, OnCollision,
+    ///     OnTrigger, OnFrame, OnEnd), with the interval it was in, whether that interval uses Groups or defines its
+    ///     events directly.
+    ///  3. Playing reaction: its name and attributes, and the ReactionGroup it comes from.
+    ///  4. Its Reaction Conditions (Width, Height, DeltaX, DeltaY, VelocityX, VelocityY), listed and, for the
+    ///     measurable ones, drawn on the collision the reaction was measured on: a line from the condition's corner
+    ///     (mirrored when facing left), rounded at both ends, the condition's name at its top and its measurement
+    ///     ("Min 200", "Max 0", "Range 200-400") beside it, inside the platform. Several lines at the same corner are
+    ///     set side by side, each in its own color.
     ///
-    /// The list on the left names each move with its conditions and their current value: green when it holds now,
-    /// red when it does not, grey when it cannot be measured (C = collision conditions, measured at the hit).
+    /// The event and reaction are recorded by ControllerAnimations when the game plays the reaction (ReactionTrace);
+    /// they are shown while that reaction's move plays.
     /// </summary>
     public static class MoveConditionsOverlay
     {
-        const float FontSize = 13;
-        const float LineHeight = 15;
-        const float Open = 70; // world units an unbounded side (no Min or no Max) is drawn to
+        const float FontSize = 14;
+        const float LineHeight = 17;
+        const float LineGap = 16;      // screen pixels between two lines at the same corner
+        const float FirstOffset = 6;   // first line, from the platform's edge
+        const float Thick = 3;
+        const float EndRadius = 4.5f;
 
-        static readonly Color Pass = new(110, 230, 120, 255);
-        static readonly Color Fail = new(255, 95, 95, 255);
-        static readonly Color Unknown = new(170, 170, 170, 255);
-        static readonly Color Heading = new(255, 200, 80, 255);
+        static readonly Color Title = new(255, 200, 80, 255);
         static readonly Color Text = new(235, 235, 235, 255);
-        static readonly Color PanelBack = new(15, 15, 18, 170);
+        static readonly Color Dim = new(165, 165, 170, 255);
+        static readonly Color PanelBack = new(15, 15, 18, 185);
+        static readonly Color Shadow = new(0, 0, 0, 230);
 
-        // One color per move so its zones and labels can be told apart.
+        /// <summary>One color per condition, in the order the reaction lists them.</summary>
         static readonly Color[] Palette =
         {
-            new(0, 200, 255, 255), new(255, 120, 200, 255), new(255, 170, 0, 255), new(140, 255, 90, 255),
-            new(190, 140, 255, 255), new(255, 255, 90, 255), new(90, 255, 220, 255), new(255, 110, 70, 255),
+            new(0, 205, 255, 255),   // cyan
+            new(255, 120, 60, 255),  // orange
+            new(120, 235, 90, 255),  // green
+            new(255, 95, 200, 255),  // pink
+            new(255, 225, 60, 255),  // yellow
+            new(175, 140, 255, 255), // violet
         };
 
-        record struct Entry(string Event, AnimationReaction Reaction, DetectorLine? EventDetector);
+        static readonly List<Raylib_cs.Rectangle> placed = new();
 
         public static void Draw(Camera2D camera)
         {
@@ -56,361 +60,226 @@ namespace Vector
             if (player == null || animations?.Animation == null || Sets.Current == null)
                 return;
 
+            placed.Clear();
             var vs = Sets.Current.Containers[1];
-            var obj = player.ModelObject;
-            int sign = player.Sign;
-            var velocity = player.DeltaVelocity(Vector3.Zero);
-            var deltaH = player.DeltaDetector(obj.DetectorHorizontalLine);
-            var deltaV = player.DeltaDetector(obj.DetectorVerticalLine);
-
             Vector2 ToScreen(Vector3 p) => Raylib.GetWorldToScreen2D(vs.TransformPoint(p), camera);
 
-            var intervals = animations.CurrentIntervals;
-            drawn.Clear();
-            stacks.Clear();
-            placed.Clear();
-
-            // The list is made of blocks (a heading, or one move with its conditions) that are never split.
-            var blocks = new List<List<(string text, Color color, float indent)>>
+            var lines = new List<(string text, Color color, float indent)>
             {
-                new() { ($"Move conditions (I): {animations.Animation.Name}, frame {animations.CurrentFrame}, facing {(sign == 1 ? "right" : "left")}", Heading, 0) },
+                ("Moves Information: Reaction Condition", Title, 0),
+                ($"Move {animations.Animation.Name}, frame {animations.CurrentFrame}", Text, 0),
             };
-            if (intervals.Count == 0)
-                blocks[0].Add(("No interval at this frame.", Text, 8));
 
-            int colorIndex = 0;
-            foreach (var interval in intervals)
+            // 1. Active intervals that use EventGroups.
+            foreach (var interval in animations.CurrentIntervals)
             {
-                var entries = Collect(interval, obj);
-                var head = new List<(string, Color, float)> { ($"Interval {interval.BeginFrame}-{interval.EndFrame}{(entries.Count == 0 ? ": no moves" : "")}", Heading, 0) };
-                blocks.Add(head);
-
-                foreach (var entry in entries)
-                {
-                    var reaction = entry.Reaction;
-                    var color = Palette[colorIndex++ % Palette.Length];
-                    var lines = new List<(string text, Color color, float indent)>();
-                    blocks.Add(lines);
-                    lines.Add(($"{entry.Event} > {reaction.Name}{(reaction.Priority != 0 ? $"  (priority {reaction.Priority})" : "")}", color, 6));
-
-                    string extras = Extras(reaction, sign);
-                    if (extras.Length > 0)
-                        lines.Add((extras, Text, 16));
-
-                    foreach (var (deltas, type) in new[] { (reaction.DeltasH, "H"), (reaction.DeltasV, "V"), (reaction.DeltasC, "C") })
-                    {
-                        var data = type == "H" ? deltaH : type == "V" ? deltaV : null;
-                        foreach (var delta in deltas.Items)
-                            lines.Add(Describe(delta, type, data, sign, velocity));
-                    }
-
-                    DrawOnLevel(entry, color, sign, obj, ToScreen);
-                }
+                if (!string.IsNullOrEmpty(interval.Groups))
+                    lines.Add(($"Interval  Start {interval.BeginFrame}  End {interval.EndFrame}  Group {interval.Groups}", Text, 0));
             }
 
-            DrawPanel(blocks);
-        }
-
-        // The same condition is often shared by several moves (e.g. DeltaY <= 0 at corner 0): each line, ruler and
-        // side is drawn once (in the first move's color), and move names at the same place are stacked.
-        static readonly HashSet<string> drawn = new();
-        static readonly Dictionary<string, int> stacks = new();
-
-        static bool FirstTime(string key) => drawn.Add(key);
-
-        /// <summary>Screen rectangles of the labels already drawn this frame: a new label moves down past them.</summary>
-        static readonly List<Raylib_cs.Rectangle> placed = new();
-
-        static string Key(Vector2 p) => $"{MathF.Round(p.X)},{MathF.Round(p.Y)}";
-
-        /// <summary>A label under the previous ones placed at the same anchor.</summary>
-        static void StackedLabel(string text, Vector2 anchor, Vector2 offset, Color color)
-        {
-            if (!FirstTime("label|" + Key(anchor) + "|" + text))
-                return;
-            string key = Key(anchor);
-            stacks.TryGetValue(key, out int index);
-            stacks[key] = index + 1;
-            Label(text, anchor + offset + new Vector2(0, index * LineHeight), color);
-        }
-
-        /// <summary>Every (event, reaction) pair of the interval, in the order moves.xml lists them.</summary>
-        static List<Entry> Collect(AnimationInterval interval, ModelObject obj)
-        {
-            var list = new List<Entry>();
-            void Add(string name, AnimationEvent e, DetectorLine? detector = null)
+            // 2-4. The event and reaction that started the playing move.
+            var trace = animations.LastReaction;
+            var conditions = new List<(AnimationDelta delta, char type, Color color)>();
+            if (trace != null && trace.Reaction.Name == animations.Animation.Name)
             {
-                if (e.Reaction == null)
-                    return;
-                foreach (var reaction in e.Reaction)
-                    list.Add(new Entry(name, reaction, detector));
-            }
-            foreach (var e in interval.KeyEvents)
-                Add("Key " + KeyName(e.Key), e);
-            foreach (var e in interval.DetectorHEvents)
-                Add("DetectorH" + DetectorTypeName(e.Type), e, obj.DetectorHorizontalLine);
-            foreach (var e in interval.DetectorVEvents)
-                Add("DetectorV" + DetectorTypeName(e.Type), e, obj.DetectorVerticalLine);
-            foreach (var e in interval.CollisionEvents)
-                Add("OnCollision", e);
-            foreach (var e in interval.FrameEvents)
-                Add("OnFrame " + e.Frame, e);
-            foreach (var e in interval.AreaEvents)
-                Add("OnArea", e);
-            foreach (var e in interval.EndEvents)
-                Add("OnEnd", e);
-            return list;
-        }
-
-        static string KeyName(KeyboardKey key) => key switch
-        {
-            KeyboardKey.Up => "Up",
-            KeyboardKey.Down => "Down",
-            KeyboardKey.Left => "Left",
-            KeyboardKey.Right => "Right",
-            _ => "?",
-        };
-
-        static string DetectorTypeName(DetectorEvent.DetectorEventType type) => type switch
-        {
-            DetectorEvent.DetectorEventType.On => " On",
-            DetectorEvent.DetectorEventType.Off => " Off",
-            _ => "",
-        };
-
-        /// <summary>The move's other conditions (sides, slopes, inside, area name) on one line.</summary>
-        static string Extras(AnimationReaction reaction, int sign)
-        {
-            var parts = new List<string>();
-            if (reaction.Sides.Count > 0)
-                parts.Add("Sides " + string.Join("|", reaction.Sides.Select(s => MirrorSide(s, sign))));
-            if (reaction.SlopeH.Count > 0)
-                parts.Add("SlopeH " + string.Join("|", reaction.SlopeH));
-            if (reaction.SlopeV.Count > 0)
-                parts.Add("SlopeV " + string.Join("|", reaction.SlopeV));
-            if (!float.IsNaN(reaction.InsideH))
-                parts.Add("InsideH " + reaction.InsideH);
-            if (!float.IsNaN(reaction.InsideV))
-                parts.Add("InsideV " + reaction.InsideV);
-            if (reaction.TriggerName != null)
-                parts.Add("Area " + reaction.TriggerName);
-            return string.Join("   ", parts);
-        }
-
-        /// <summary>Facing left, sides 1 and 3 swap (AnimationReaction.IsSide).</summary>
-        static int MirrorSide(int side, int sign) => sign == -1 ? side switch { 1 => 3, 3 => 1, _ => side } : side;
-
-        static string Bounds(AnimationDelta delta)
-        {
-            float min = delta.Value.X, max = delta.Value.Y;
-            if (!float.IsNaN(min) && !float.IsNaN(max))
-                return $"{F(min)} .. {F(max)}";
-            if (!float.IsNaN(min))
-                return $">= {F(min)}";
-            if (!float.IsNaN(max))
-                return $"<= {F(max)}";
-            return "any";
-        }
-
-        static string F(double v) => Math.Round(v, 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
-
-        static (string, Color, float) Describe(AnimationDelta delta, string type, AnimationDeltaData? data, int sign, Vector3 velocity)
-        {
-            string corner = delta.Name is AnimationDeltaName.DeltaX or AnimationDeltaName.DeltaY && delta.Corner >= 0
-                ? $" c{delta.GetCorner(sign)}" : "";
-            string text = $"{DeltaName(delta.Name)} {Bounds(delta)}  [{type}{corner}]";
-            if (type == "C")
-                return (text + "  (at the collision)", Unknown, 16);
-            if (data == null)
-                return (text + $"  no platform on Detector{type}", Fail, 16);
-            double value = data.GetDeltaValue(delta.Name, delta.GetCorner(sign), sign, velocity);
-            bool ok = delta.IsInterval(value);
-            return (text + $"  = {F(value)}", ok ? Pass : Fail, 16);
-        }
-
-        static string DeltaName(AnimationDeltaName name) => name switch
-        {
-            AnimationDeltaName.VelocityX => "VelosityX",
-            AnimationDeltaName.VelocityY => "VelosityY",
-            _ => name.ToString(),
-        };
-
-        // ================= ON THE LEVEL ================= //
-
-        static void DrawOnLevel(Entry entry, Color color, int sign, ModelObject obj, Func<Vector3, Vector2> toScreen)
-        {
-            var reaction = entry.Reaction;
-            string name = reaction.Name;
-
-            // Sides of the detector event's platform.
-            if (reaction.Sides.Count > 0 && entry.EventDetector?.Platform is QuadRunner sidePlatform)
-            {
-                var edges = sidePlatform.EdgeList;
-                foreach (int side in reaction.Sides)
+                lines.Add((string.Empty, Text, 0));
+                if (trace.Interval != null)
                 {
-                    int s = MirrorSide(side, sign);
-                    if (s < 0 || s >= edges.Count)
-                        continue;
-                    var a = toScreen(edges[s].Point1);
-                    var b = toScreen(edges[s].Point2);
-                    if (FirstTime($"side|{Key(a)}|{Key(b)}"))
-                        Raylib.DrawLineEx(a, b, 4, Fade(color, 0.8f));
-                    // On a long side the label goes where the player is, not at the side's middle off screen.
-                    var at = ClosestOnSegment(a, b, toScreen(entry.EventDetector!.Position));
-                    StackedLabel($"side {s}: {name}", at, new Vector2(6, 6), color);
-                }
-            }
-
-            DrawType(reaction.DeltasH, obj.DetectorHorizontalLine, "H", name, color, sign, toScreen);
-            DrawType(reaction.DeltasV, obj.DetectorVerticalLine, "V", name, color, sign, toScreen);
-        }
-
-        static void DrawType(AnimationDeltas deltas, DetectorLine? detector, string type, string name, Color color, int sign, Func<Vector3, Vector2> toScreen)
-        {
-            if (detector == null || deltas.Items.Count == 0)
-                return;
-            var platform = detector.Platform;
-            Vector3 det = detector.Position;
-
-            // Width / Height: rulers along the platform.
-            if (platform != null)
-            {
-                foreach (var delta in deltas.Items)
-                {
-                    if (delta.Name == AnimationDeltaName.Width)
-                        Ruler(platform, true, delta, $"{name} Width [{type}]", color, sign, toScreen);
-                    else if (delta.Name == AnimationDeltaName.Height)
-                        Ruler(platform, false, delta, $"{name} Height [{type}]", color, sign, toScreen);
-                }
-            }
-
-            // DeltaX / DeltaY: one zone per corner.
-            foreach (var group in deltas.Items
-                         .Where(d => d.Name is AnimationDeltaName.DeltaX or AnimationDeltaName.DeltaY)
-                         .GroupBy(d => d.GetCorner(sign)))
-            {
-                int corner = group.Key;
-                var dx = group.FirstOrDefault(d => d.Name == AnimationDeltaName.DeltaX);
-                var dy = group.FirstOrDefault(d => d.Name == AnimationDeltaName.DeltaY);
-
-                // Offsets of the detector from the corner: (detector - corner).X * sign in [x0, x1], .Y in [y0, y1].
-                float x0 = dx?.Value.X ?? float.NaN, x1 = dx?.Value.Y ?? float.NaN;
-                float y0 = dy?.Value.X ?? float.NaN, y1 = dy?.Value.Y ?? float.NaN;
-
-                if (platform != null)
-                {
-                    Vector3 c = platform.GetCornerByIndex(corner);
-                    // Detector X in [c + x0, c + x1] facing right, [c - x1, c - x0] facing left.
-                    var (left, right, leftLabel, rightLabel) = sign == 1
-                        ? (c.X + x0, c.X + x1, dx != null ? $"DeltaX {F(x0)}" : null, dx != null ? $"DeltaX {F(x1)}" : null)
-                        : (c.X - x1, c.X - x0, dx != null ? $"DeltaX {F(x1)}" : null, dx != null ? $"DeltaX {F(x0)}" : null);
-                    float top = c.Y + y0, bottom = c.Y + y1;
-                    Zone(c, left, right, top, bottom, leftLabel, rightLabel,
-                        dy != null ? $"DeltaY {F(y0)}" : null, dy != null ? $"DeltaY {F(y1)}" : null,
-                        dashed: false, color, toScreen);
-
-                    var cs = toScreen(c);
-                    if (FirstTime("corner|" + Key(cs)))
-                    {
-                        Raylib.DrawRectangleV(cs - new Vector2(3, 3), new Vector2(6, 6), color);
-                        Raylib.DrawLineEx(cs, toScreen(det), 1, Fade(color, 0.6f));
-                    }
-                    StackedLabel($"{name} [{type} c{corner}]", cs, new Vector2(6, 4), color);
+                    string groups = string.IsNullOrEmpty(trace.Interval.Groups) ? "" : $"  Group {trace.Interval.Groups}";
+                    lines.Add(($"Interval  Start {trace.Interval.BeginFrame}  End {trace.Interval.EndFrame}{groups}   (in {trace.FromMove}, frame {trace.FromFrame})", Text, 0));
                 }
                 else
                 {
-                    // No platform: where the corner of a platform has to be. Corner X in [d - x1, d - x0] facing
-                    // right, [d + x0, d + x1] facing left; corner Y in [d - y1, d - y0].
-                    var (left, right, leftLabel, rightLabel) = sign == 1
-                        ? (det.X - x1, det.X - x0, dx != null ? $"DeltaX {F(x1)}" : null, dx != null ? $"DeltaX {F(x0)}" : null)
-                        : (det.X + x0, det.X + x1, dx != null ? $"DeltaX {F(x0)}" : null, dx != null ? $"DeltaX {F(x1)}" : null);
-                    float top = det.Y - y1, bottom = det.Y - y0;
-                    Zone(det, left, right, top, bottom, leftLabel, rightLabel,
-                        dy != null ? $"DeltaY {F(y1)}" : null, dy != null ? $"DeltaY {F(y0)}" : null,
-                        dashed: true, color, toScreen);
-                    var ds = toScreen(det);
-                    StackedLabel($"No platform on Detector{type}: dashed = where a platform's corner must be", ds, new Vector2(8, 8), Text);
+                    lines.Add(($"In {trace.FromMove}, frame {trace.FromFrame}", Text, 0));
+                }
+                lines.Add(("Event  " + EventText(trace), Title, 10));
+
+                var reaction = trace.Reaction;
+                string reactionGroup = reaction.ReactionGroup is string rg ? $"   (ReactionGroup {rg})" : "";
+                lines.Add(($"Reaction  {reaction.Name}{reactionGroup}", Title, 20));
+                if (reaction.XmlAttributes.Length > 0)
+                    lines.Add((reaction.XmlAttributes, Dim, 30));
+
+                int index = 0;
+                foreach (var (deltas, type) in new[] { (reaction.DeltasH, 'H'), (reaction.DeltasV, 'V'), (reaction.DeltasC, 'C') })
+                {
+                    foreach (var delta in deltas.Items)
+                    {
+                        var color = Palette[index++ % Palette.Length];
+                        lines.Add((ConditionXml(delta, type) + ValueText(trace, delta, type), color, 30));
+                        conditions.Add((delta, type, color));
+                    }
+                }
+                if (index == 0)
+                    lines.Add(("No Reaction Conditions", Dim, 30));
+            }
+
+            DrawPanel(lines);
+            if (trace != null && conditions.Count > 0)
+                DrawConditions(trace, conditions, ToScreen);
+        }
+
+        // ================= TEXT ================= //
+
+        static string F(double v) => Math.Round(v, 1).ToString(CultureInfo.InvariantCulture);
+
+        static string EventText(ReactionTrace trace)
+        {
+            var param = trace.Event?.Param;
+            if (param == null)
+            {
+                return trace.EventType switch
+                {
+                    AnimationEventType.Controller => "Keys",
+                    AnimationEventType.DetectorOn => "Detector On",
+                    AnimationEventType.DetectorOff => "Detector Off",
+                    _ => trace.EventType.ToString(),
+                };
+            }
+            string text = param.XmlName + (param.XmlAttributes.Length > 0 ? "  " + param.XmlAttributes : "");
+            if (param.ReactionGroups != null)
+                text += $"  Groups=\"{param.ReactionGroups}\"";
+            if (param.EventGroup != null)
+                text += $"   (EventGroup {param.EventGroup})";
+            return text;
+        }
+
+        static string ConditionName(AnimationDelta delta) => delta.XmlName.Length > 0 ? delta.XmlName : delta.Name.ToString();
+
+        static string ConditionXml(AnimationDelta delta, char type)
+        {
+            var parts = new List<string> { "<" + ConditionName(delta) };
+            if (!float.IsNaN(delta.Value.X))
+                parts.Add($"Min=\"{F(delta.Value.X)}\"");
+            if (!float.IsNaN(delta.Value.Y))
+                parts.Add($"Max=\"{F(delta.Value.Y)}\"");
+            parts.Add($"Type=\"{type}\"");
+            if (delta.Corner >= 0)
+                parts.Add($"Corner=\"{delta.Corner}\"");
+            return string.Join(" ", parts) + "/>";
+        }
+
+        static QuadRunner? PlatformOf(ReactionTrace trace, char type) => type switch
+        {
+            'H' => trace.PlatformH,
+            'V' => trace.PlatformV,
+            _ => trace.PlatformC,
+        };
+
+        /// <summary>The value measured when the reaction was chosen.</summary>
+        static string ValueText(ReactionTrace trace, AnimationDelta delta, char type)
+        {
+            if (delta.Name is AnimationDeltaName.VelocityX or AnimationDeltaName.VelocityY)
+                return $"   = {F(delta.Name == AnimationDeltaName.VelocityX ? trace.Velocity.X : trace.Velocity.Y)}";
+            var platform = PlatformOf(trace, type);
+            if (platform == null)
+                return "   (no collision)";
+            var position = type switch { 'H' => trace.PositionH, 'V' => trace.PositionV, _ => trace.PositionC };
+            var data = new AnimationDeltaData(platform, position, trace.Sign);
+            double value = data.GetDeltaValue(delta.Name, CornerOf(delta, trace.Sign), trace.Sign, trace.Velocity);
+            return $"   = {F(value)}";
+        }
+
+        static string Measurement(AnimationDelta delta)
+        {
+            float min = delta.Value.X, max = delta.Value.Y;
+            if (!float.IsNaN(min) && !float.IsNaN(max))
+                return $"Range {F(min)}-{F(max)}";
+            if (!float.IsNaN(min))
+                return $"Min {F(min)}";
+            if (!float.IsNaN(max))
+                return $"Max {F(max)}";
+            return "Any";
+        }
+
+        // ================= ON THE COLLISION ================= //
+
+        /// <summary>The corner used: the condition's, mirrored when facing left (no Corner: the front top corner).</summary>
+        static int CornerOf(AnimationDelta delta, int sign) => delta.Corner < 0 ? (sign == 1 ? 0 : 1) : delta.GetCorner(sign);
+
+        static bool Vertical(AnimationDeltaName name) => name is AnimationDeltaName.Height or AnimationDeltaName.DeltaY;
+
+        static void DrawConditions(ReactionTrace trace, List<(AnimationDelta delta, char type, Color color)> conditions, Func<Vector3, Vector2> toScreen)
+        {
+            int sign = trace.Sign;
+
+            // Lines at the same corner of the same collision along the same axis are set side by side.
+            var groups = conditions
+                .Where(c => c.delta.Name is AnimationDeltaName.Width or AnimationDeltaName.Height or AnimationDeltaName.DeltaX or AnimationDeltaName.DeltaY)
+                .Where(c => PlatformOf(trace, c.type) != null)
+                .GroupBy(c => (platform: PlatformOf(trace, c.type)!, corner: CornerOf(c.delta, sign), vertical: Vertical(c.delta.Name)));
+
+            foreach (var group in groups)
+            {
+                var (platform, corner, vertical) = group.Key;
+                var items = group.ToList();
+                Vector3 c = platform.GetCornerByIndex(corner);
+                // Into the collision from this corner (Y grows downward in Vector: negative Y is up).
+                float inX = corner is 0 or 3 ? 1 : -1;
+                float inY = corner is 0 or 1 ? 1 : -1;
+
+                var cornerScreen = toScreen(c);
+                Raylib.DrawCircleLinesV(cornerScreen, 6, Text);
+                Raylib.DrawCircleV(cornerScreen, 2.5f, Text);
+
+                // Labels go inside the collision, past all the lines of this corner.
+                float labelOffset = FirstOffset + items.Count * LineGap + 2;
+
+                for (int k = 0; k < items.Count; k++)
+                {
+                    var (delta, _, color) = items[k];
+                    float offset = FirstOffset + k * LineGap;
+                    Vector2 shift = vertical ? new Vector2(inX * offset, 0) : new Vector2(0, inY * offset);
+
+                    // Direction of a positive value along the axis.
+                    float dir = delta.Name switch
+                    {
+                        AnimationDeltaName.Height => inY,  // measured into the collision
+                        AnimationDeltaName.Width => inX,
+                        AnimationDeltaName.DeltaX => sign, // toward the facing direction
+                        _ => 1,                            // DeltaY: positive is downward
+                    };
+                    Vector2 At(float v) => toScreen(vertical ? new Vector3(c.X, c.Y + dir * v, 0) : new Vector3(c.X + dir * v, c.Y, 0)) + shift;
+
+                    float min = delta.Value.X, max = delta.Value.Y;
+                    Vector2 a, b;
+                    if (!float.IsNaN(min) && !float.IsNaN(max))
+                    {
+                        // Range: a dashed guide from the corner to Min, the valid part solid.
+                        if (min != 0)
+                            Dashed(At(0), At(min), color);
+                        a = At(min);
+                        b = At(max);
+                    }
+                    else
+                    {
+                        a = At(0);
+                        b = At(!float.IsNaN(min) ? min : !float.IsNaN(max) ? max : 0);
+                    }
+                    // Short link from the corner to the line set off the edge.
+                    Raylib.DrawLineEx(cornerScreen, At(0), 1, Fade(color, 0.6f));
+                    Raylib.DrawLineEx(a, b, Thick, color);
+                    Raylib.DrawCircleV(a, EndRadius, color);
+                    Raylib.DrawCircleV(b, EndRadius, color);
+
+                    string name = ConditionName(delta);
+                    string measurement = Measurement(delta);
+                    if (vertical)
+                    {
+                        // Name at the top of the line, measurement beside its middle, both inside the collision.
+                        float topY = MathF.Min(MathF.Min(a.Y, b.Y), At(0).Y);
+                        float x = At(0).X - shift.X + inX * labelOffset;
+                        PlaceBlock(name, measurement, new Vector2(x, topY - 2), inX < 0, color);
+                    }
+                    else
+                    {
+                        // Name at the start of the line, measurement under its middle (above for a bottom corner).
+                        float y = At(0).Y - shift.Y + inY * labelOffset + (inY < 0 ? -LineHeight * 2 : 0);
+                        float left = MathF.Min(MathF.Min(a.X, b.X), At(0).X);
+                        PlaceBlock(name, measurement, new Vector2(left, y), false, color);
+                    }
                 }
             }
-        }
-
-        /// <summary>
-        /// A zone bounded by up to four lines (NaN = no bound on that side, drawn open). Only bounded sides get a
-        /// line and a label; an axis without any condition spans <see cref="Open"/> around the anchor.
-        /// </summary>
-        static void Zone(Vector3 anchor, float left, float right, float top, float bottom,
-            string? leftLabel, string? rightLabel, string? topLabel, string? bottomLabel,
-            bool dashed, Color color, Func<Vector3, Vector2> toScreen)
-        {
-            bool hasLeft = !float.IsNaN(left), hasRight = !float.IsNaN(right);
-            bool hasTop = !float.IsNaN(top), hasBottom = !float.IsNaN(bottom);
-            bool xAxis = leftLabel != null, yAxis = topLabel != null;
-
-            // Extent of the lines along the other axis.
-            float l = hasLeft ? left : (hasRight ? right - Open : anchor.X - Open);
-            float r = hasRight ? right : (hasLeft ? left + Open : anchor.X + Open);
-            float t = hasTop ? top : (hasBottom ? bottom - Open : anchor.Y - Open);
-            float b = hasBottom ? bottom : (hasTop ? top + Open : anchor.Y + Open);
-            if (!xAxis) { l = anchor.X - Open; r = anchor.X + Open; }
-            if (!yAxis) { t = anchor.Y - Open; b = anchor.Y + Open; }
-
-            var tl = toScreen(new Vector3(l, t, 0));
-            var br = toScreen(new Vector3(r, b, 0));
-            var fill = new Raylib_cs.Rectangle(MathF.Min(tl.X, br.X), MathF.Min(tl.Y, br.Y), MathF.Abs(br.X - tl.X), MathF.Abs(br.Y - tl.Y));
-            if (FirstTime($"fill|{fill.X:0},{fill.Y:0},{fill.Width:0},{fill.Height:0}"))
-                Raylib.DrawRectangleRec(fill, Fade(color, dashed ? 0.06f : 0.12f));
-
-            if (xAxis && hasLeft)
-                Line(toScreen(new Vector3(left, t, 0)), toScreen(new Vector3(left, b, 0)), dashed, color, leftLabel!, true);
-            if (xAxis && hasRight && right != left)
-                Line(toScreen(new Vector3(right, t, 0)), toScreen(new Vector3(right, b, 0)), dashed, color, rightLabel!, true);
-            if (yAxis && hasTop)
-                Line(toScreen(new Vector3(l, top, 0)), toScreen(new Vector3(r, top, 0)), dashed, color, topLabel!, false);
-            if (yAxis && hasBottom && bottom != top)
-                Line(toScreen(new Vector3(l, bottom, 0)), toScreen(new Vector3(r, bottom, 0)), dashed, color, bottomLabel!, false);
-        }
-
-        static void Line(Vector2 a, Vector2 b, bool dashed, Color color, string label, bool vertical)
-        {
-            if (!FirstTime($"line|{Key(a)}|{Key(b)}|{label}"))
-                return;
-            if (dashed)
-                DashedLine(a, b, 2, color);
-            else
-                Raylib.DrawLineEx(a, b, 2, color);
-            // Vertical lines: label at the top end; horizontal lines: label at the right end.
-            var at = vertical ? (a.Y < b.Y ? a : b) + new Vector2(3, -LineHeight) : (a.X > b.X ? a : b) + new Vector2(4, -LineHeight / 2);
-            Label(label, at, color);
-        }
-
-        /// <summary>Width (along the top edge) or Height (along the left edge) with its Min / Max marks.</summary>
-        static void Ruler(QuadRunner platform, bool width, AnimationDelta delta, string title, Color color, int sign, Func<Vector3, Vector2> toScreen)
-        {
-            if (!FirstTime($"ruler|{platform.GetHashCode()}|{width}|{delta.Value.X}|{delta.Value.Y}|{title}"))
-                return;
-            Vector3 origin = platform.GetCornerByIndex(0);
-            const float offset = 8; // drawn a little outside the platform
-            Vector3 Along(float d) => width ? new Vector3(origin.X + d, origin.Y - offset, 0) : new Vector3(origin.X - offset, origin.Y + d, 0);
-
-            float min = delta.Value.X, max = delta.Value.Y;
-            float actual = width ? platform.GetSize(sign).X : platform.GetSize(sign).Y;
-            float end = MathF.Max(actual, float.IsNaN(max) ? (float.IsNaN(min) ? 0 : min) : max);
-
-            Raylib.DrawLineEx(toScreen(Along(0)), toScreen(Along(end)), 1, Fade(color, 0.5f));
-            Raylib.DrawLineEx(toScreen(Along(0)), toScreen(Along(actual)), 3, Fade(color, delta.IsInterval(actual) ? 0.9f : 0.35f));
-            void Mark(float d, string text)
-            {
-                var p = toScreen(Along(d));
-                var n = width ? new Vector2(0, 6) : new Vector2(6, 0);
-                Raylib.DrawLineEx(p - n, p + n, 2, color);
-                Label(text, width ? p + new Vector2(3, -LineHeight - 6) : p + new Vector2(-TextWidth(text) - 10, -LineHeight / 2), color);
-            }
-            if (!float.IsNaN(min))
-                Mark(min, $"{(width ? "W" : "H")} >= {F(min)}");
-            if (!float.IsNaN(max))
-                Mark(max, $"{(width ? "W" : "H")} <= {F(max)}");
-            var start = toScreen(Along(0));
-            Label(title, width ? start + new Vector2(0, -LineHeight * 2 - 6) : start + new Vector2(-TextWidth(title) - 10, -LineHeight * 1.5f), color);
         }
 
         // ================= DRAWING HELPERS ================= //
@@ -419,87 +288,61 @@ namespace Vector
 
         static float TextWidth(string text) => Raylib.MeasureTextEx(GameFont.Font, text, FontSize, FontSize / 10f).X;
 
-        /// <summary>Text with a dark shadow so it reads over any background.</summary>
-        static void Label(string text, Vector2 at, Color color)
+        /// <summary>
+        /// The condition's name (bold, in its color) with its measurement under it (white), kept together: when the
+        /// block would cover one already drawn, the whole block moves down.
+        /// </summary>
+        static void PlaceBlock(string name, string measurement, Vector2 at, bool alignRight, Color color)
         {
-            at = new Vector2(MathF.Round(at.X), MathF.Round(at.Y));
-            float w = TextWidth(text);
-            for (int tries = 0; tries < 12; tries++)
+            float w = MathF.Max(TextWidth(name), TextWidth(measurement));
+            float x = alignRight ? at.X - w : at.X;
+            float y = MathF.Round(at.Y);
+            for (int tries = 0; tries < 16; tries++)
             {
-                var rect = new Raylib_cs.Rectangle(at.X, at.Y, w, LineHeight - 1);
+                var rect = new Raylib_cs.Rectangle(x - 1, y, w + 2, LineHeight * 2 + 2);
                 if (!placed.Any(r => Raylib.CheckCollisionRecs(r, rect)))
                     break;
-                at.Y += LineHeight;
+                y += LineHeight;
             }
-            placed.Add(new Raylib_cs.Rectangle(at.X, at.Y, w, LineHeight - 1));
+            placed.Add(new Raylib_cs.Rectangle(x - 1, y, w + 2, LineHeight * 2 + 2));
+            float nameX = alignRight ? x + w - TextWidth(name) : x;
+            float measureX = alignRight ? x + w - TextWidth(measurement) : x;
+            DrawOutlined(name, new Vector2(nameX, y), color, bold: true);
+            DrawOutlined(measurement, new Vector2(measureX, y + LineHeight), Text, bold: false);
+        }
+
+        static void DrawOutlined(string text, Vector2 at, Color color, bool bold)
+        {
+            at = new Vector2(MathF.Round(at.X), MathF.Round(at.Y));
             if (at.X > Raylib.GetScreenWidth() || at.Y > Raylib.GetScreenHeight() || at.X + TextWidth(text) < 0 || at.Y + LineHeight < 0)
                 return;
-            GameFont.Draw(text, at.X + 1, at.Y + 1, FontSize, new Color((byte)0, (byte)0, (byte)0, (byte)200));
+            foreach (var d in new[] { new Vector2(-1, 0), new Vector2(1, 0), new Vector2(0, -1), new Vector2(0, 1), new Vector2(1, 1) })
+                GameFont.Draw(text, at.X + d.X, at.Y + d.Y, FontSize, Shadow);
             GameFont.Draw(text, at.X, at.Y, FontSize, color);
+            if (bold)
+                GameFont.Draw(text, at.X + 0.6f, at.Y, FontSize, color);
         }
 
-        static Vector2 ClosestOnSegment(Vector2 a, Vector2 b, Vector2 p)
-        {
-            var ab = b - a;
-            float lengthSquared = ab.LengthSquared();
-            if (lengthSquared < 1e-6f)
-                return a;
-            float t = Math.Clamp(Vector2.Dot(p - a, ab) / lengthSquared, 0, 1);
-            return a + ab * t;
-        }
-
-        static void DashedLine(Vector2 a, Vector2 b, float thick, Color color)
+        static void Dashed(Vector2 a, Vector2 b, Color color)
         {
             float length = Vector2.Distance(a, b);
             if (length < 0.5f)
                 return;
             var dir = (b - a) / length;
-            const float dash = 6, gap = 4;
-            for (float d = 0; d < length; d += dash + gap)
-                Raylib.DrawLineEx(a + dir * d, a + dir * MathF.Min(d + dash, length), thick, color);
+            for (float d = 0; d < length; d += 9)
+                Raylib.DrawLineEx(a + dir * d, a + dir * MathF.Min(d + 5, length), 1.5f, Fade(color, 0.8f));
         }
 
-        /// <summary>
-        /// The list, along the top of the screen in as many columns as needed (left of the debug buttons) and at
-        /// most ~40% of the screen high, so the player and the level below stay visible.
-        /// </summary>
-        static void DrawPanel(List<List<(string text, Color color, float indent)>> blocks)
+        static void DrawPanel(List<(string text, Color color, float indent)> lines)
         {
-            const float left = 10, top = 26, pad = 6, columnGap = 14;
-            float right = Raylib.GetScreenWidth() - 200; // the debug buttons' column
-            float maxHeight = MathF.Max(LineHeight * 6, Raylib.GetScreenHeight() * 0.42f);
-            int maxLines = (int)(maxHeight / LineHeight);
-
-            // Lay the blocks out in columns.
-            var columns = new List<List<(string text, Color color, float indent)>> { new() };
-            foreach (var block in blocks)
-            {
-                var column = columns[^1];
-                if (column.Count > 0 && column.Count + block.Count > maxLines)
-                    columns.Add(column = new());
-                column.AddRange(block.Take(maxLines));
-            }
-
-            float x = left;
-            int hidden = 0;
-            for (int c = 0; c < columns.Count; c++)
-            {
-                var column = columns[c];
-                float width = 0;
-                foreach (var line in column)
-                    width = MathF.Max(width, line.indent + TextWidth(line.text));
-                if (c > 0 && x + width > right)
-                {
-                    hidden += columns.Skip(c).Sum(col => col.Count);
-                    break;
-                }
-                Raylib.DrawRectangleRec(new Raylib_cs.Rectangle(x - pad, top - pad, width + pad * 2, column.Count * LineHeight + pad * 2), PanelBack);
-                for (int i = 0; i < column.Count; i++)
-                    GameFont.Draw(column[i].text, x + column[i].indent, top + i * LineHeight, FontSize, column[i].color);
-                x += width + pad * 2 + columnGap;
-            }
-            if (hidden > 0)
-                Label($"... {hidden} more lines", new Vector2(left, top + maxLines * LineHeight + pad * 2), Unknown);
+            const float x = 10, y = 26, pad = 6;
+            float width = 0;
+            foreach (var line in lines)
+                width = MathF.Max(width, line.indent + TextWidth(line.text));
+            var back = new Raylib_cs.Rectangle(x - pad, y - pad, width + pad * 2, lines.Count * LineHeight + pad * 2);
+            Raylib.DrawRectangleRec(back, PanelBack);
+            for (int i = 0; i < lines.Count; i++)
+                GameFont.Draw(lines[i].text, x + lines[i].indent, y + i * LineHeight, FontSize, lines[i].color);
         }
     }
 }

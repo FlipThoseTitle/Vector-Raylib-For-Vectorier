@@ -22,6 +22,12 @@ namespace Vector.Core.Animation
         private static System.Random _Random;
 
         /// <summary>SlopeH / SlopeV platform types the reaction accepts (empty: any).</summary>
+        /// <summary>The reaction's attributes as written in moves.xml (FirstFrame="21" Sides="3"...).</summary>
+        public string XmlAttributes { get; } = string.Empty;
+
+        /// <summary>The ReactionGroup this reaction is defined in (null: written directly in an event).</summary>
+        public string? ReactionGroup => AnimationGroup.Groups.Values.FirstOrDefault(g => g.Reactions != null && g.Reactions.Contains(this))?.Name;
+
         public IReadOnlyList<int> SlopeH => _slopeH;
 
         public IReadOnlyList<int> SlopeV => _slopeV;
@@ -201,6 +207,8 @@ namespace Vector.Core.Animation
             Sides = new List<int>();
             NodesWi = new List<string>();
             Name = node.Name;
+            XmlAttributes = node.Attributes == null ? string.Empty :
+                string.Join(" ", node.Attributes.Cast<XmlAttribute>().Select(a => $"{a.Name}=\"{a.Value}\""));
             FirstFrame = node.Attributes["FirstFrame"].ParseInt();
             Priority = node.Attributes["Priority"].ParseInt();
             CornerCling = node.Attributes["CornerCling"].ParseBool();

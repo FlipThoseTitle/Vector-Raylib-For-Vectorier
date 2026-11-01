@@ -94,6 +94,12 @@ namespace Vector.Core.Animation
 
         public Vector2 NoPlatformBound;
 
+        /// <summary>The interval's Groups attribute (EventGroups), null when its events are written inside it.</summary>
+        public string? Groups { get; private set; }
+
+        /// <summary>The EventGroup being parsed (null: the interval's own events).</summary>
+        private string? _parsingGroup;
+
         public bool ConditionlessBoundH
         {
             get;
@@ -136,13 +142,16 @@ namespace Vector.Core.Animation
         {
             foreach (XmlNode group in groups)
             {
+                _parsingGroup = group.Attributes?["Name"]?.Value;
                 Parse(group);
             }
+            _parsingGroup = null;
 
         }
 
         private void PreParse(XmlNode node)
         {
+            Groups = node.Attributes?["Groups"]?.Value;
             BeginFrame = node.Attributes["Start"].ParseInt();
             EndFrame = node.Attributes["End"].ParseInt();
             IsSafe = node.Attributes["Safe"].ParseBool();
@@ -267,7 +276,14 @@ namespace Vector.Core.Animation
             {
                 list = null;
             }
-            return new AnimationEventParam(list, list2);
+            return new AnimationEventParam(list, list2)
+            {
+                XmlName = node.Name,
+                XmlAttributes = string.Join(" ", node.Attributes == null ? Enumerable.Empty<string>() :
+                    node.Attributes.Cast<XmlAttribute>().Where(a => a.Name != "Groups").Select(a => $"{a.Name}=\"{a.Value}\"")),
+                EventGroup = _parsingGroup,
+                ReactionGroups = node.Attributes?["Groups"]?.Value,
+            };
         }
 
         public static string TypeToString(AnimationEventType pType)

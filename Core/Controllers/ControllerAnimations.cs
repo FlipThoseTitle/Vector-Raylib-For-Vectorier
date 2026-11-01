@@ -327,6 +327,7 @@ namespace Vector.Core.Controllers
             {
                 return;
             }
+            Trace(reaction, type);
             ModelHuman modelHuman = (ModelHuman)_Model;
             modelHuman.VelocityQuads = new Vector3();
             if (reaction.Name == "Death")
@@ -744,7 +745,94 @@ namespace Vector.Core.Controllers
             {
                 return null;
             }
-            return ((ModelHuman)_Model).SortAnimation(reactions, delta, platform);
+            var human = (ModelHuman)_Model;
+            // What the conditions are measured on, as SortAnimation sees it (for Moves Information).
+            _sortSnapshot = (
+                _ModelObject.DetectorHorizontalLine?.Platform, _ModelObject.DetectorHorizontalLine?.Position ?? Vector3.Zero,
+                _ModelObject.DetectorVerticalLine?.Platform, _ModelObject.DetectorVerticalLine?.Position ?? Vector3.Zero,
+                delta?.Platform, delta?.Position ?? Vector3.Zero,
+                human.DeltaVelocity(platform != null ? new Vector3(platform.TweenPosition, 0) : new Vector3()));
+            return human.SortAnimation(reactions, delta, platform);
+        }
+
+        private (QuadRunner? h, Vector3 hPos, QuadRunner? v, Vector3 vPos, QuadRunner? c, Vector3 cPos, Vector3 velocity) _sortSnapshot;
+
+        /// <summary>DetectorH or DetectorV: which detector fired the event being handled.</summary>
+        private string _traceDetector;
+
+        /// <summary>The last reaction played and why (Moves Information, I key).</summary>
+        public ReactionTrace LastReaction { get; private set; }
+
+        public void ClearTrace() => LastReaction = null;
+
+        /// <summary>Records the reaction about to play with the interval and event it comes from.</summary>
+        private void Trace(AnimationReaction reaction, AnimationEventType type)
+        {
+            if (Animation == null)
+            {
+                return;
+            }
+            string[] names = type switch
+            {
+                AnimationEventType.Controller => new[] { "Keys" },
+                AnimationEventType.DetectorOn or AnimationEventType.DetectorOff => new[] { _traceDetector ?? "DetectorV" },
+                AnimationEventType.OnEnd => new[] { "OnEnd" },
+                AnimationEventType.OnCollision => new[] { "OnCollision" },
+                AnimationEventType.OnArea => new[] { "OnArea", "OnTrigger" },
+                AnimationEventType.OnFrame => new[] { "OnFrame" },
+                _ => Array.Empty<string>(),
+            };
+            AnimationInterval foundInterval = null;
+            AnimationEvent foundEvent = null;
+            // The intervals of the current frame first, then the whole move; an event of the right kind first.
+            foreach (var intervals in new[] { new List<AnimationInterval>(Intervals), Animation.Intervals })
+            {
+                foreach (bool matchKind in new[] { true, false })
+                {
+                    foreach (var interval in intervals)
+                    {
+                        foreach (var e in AllEvents(interval))
+                        {
+                            if (e.Reaction != null && e.Reaction.Contains(reaction) && (!matchKind || names.Contains(e.Param.XmlName)))
+                            {
+                                foundInterval = interval;
+                                foundEvent = e;
+                                goto found;
+                            }
+                        }
+                    }
+                }
+            }
+        found:
+            var snap = _sortSnapshot;
+            LastReaction = new ReactionTrace
+            {
+                Reaction = reaction,
+                FromMove = Animation.Name,
+                FromFrame = CurrentFrame,
+                Interval = foundInterval,
+                Event = foundEvent,
+                EventType = type,
+                PlatformH = snap.h,
+                PositionH = snap.hPos,
+                PlatformV = snap.v,
+                PositionV = snap.vPos,
+                PlatformC = snap.c,
+                PositionC = snap.cPos,
+                Velocity = snap.velocity,
+                Sign = Sign,
+            };
+        }
+
+        private static IEnumerable<AnimationEvent> AllEvents(AnimationInterval interval)
+        {
+            foreach (var e in interval.KeyEvents) yield return e;
+            foreach (var e in interval.DetectorHEvents) yield return e;
+            foreach (var e in interval.DetectorVEvents) yield return e;
+            foreach (var e in interval.CollisionEvents) yield return e;
+            foreach (var e in interval.FrameEvents) yield return e;
+            foreach (var e in interval.AreaEvents) yield return e;
+            foreach (var e in interval.EndEvents) yield return e;
         }
 
         public void CheckFrame()
@@ -816,6 +904,7 @@ namespace Vector.Core.Controllers
                     }
                 }
             }
+            _traceDetector = p_event.IsVertical ? "DetectorV" : "DetectorH";
             AnimationReaction animationReaction2 = Sort(_ForSort, null, p_event.Platform);
             _ForSort.Clear();
             if (animationReaction2 == null)

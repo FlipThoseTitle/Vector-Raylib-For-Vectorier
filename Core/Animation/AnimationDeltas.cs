@@ -21,7 +21,7 @@ namespace Vector.Core.Animation
                 {
                     Vector2 p_value = new Vector2(node.Attributes["Min"].ParseFloat(float.NaN), node.Attributes["Max"].ParseFloat(float.NaN));
                     int p_corner = node.Attributes["Corner"].ParseInt(-1);
-                    _deltas.Add(new AnimationDelta(GetDeltaNameByString(node.Name), type, p_value, p_corner));
+                    _deltas.Add(new AnimationDelta(GetDeltaNameByString(node.Name), type, p_value, p_corner) { XmlName = node.Name });
                 }
             }
         }
