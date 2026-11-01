@@ -8,6 +8,8 @@ namespace Vector.Core.Animation.Events
     {
         private readonly KeyboardKey _key;
 
+        public KeyboardKey Key => _key;
+
         public AnimationEventKey(AnimationEventParam param, XmlNode node)
             : base(param)
         {

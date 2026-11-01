@@ -21,6 +21,11 @@ namespace Vector.Core.Animation
 
         private static System.Random _Random;
 
+        /// <summary>SlopeH / SlopeV platform types the reaction accepts (empty: any).</summary>
+        public IReadOnlyList<int> SlopeH => _slopeH;
+
+        public IReadOnlyList<int> SlopeV => _slopeV;
+
         public static List<AnimationReaction> Reactions
         {
             get;

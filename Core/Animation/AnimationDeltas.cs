@@ -10,6 +10,9 @@ namespace Vector.Core.Animation
 
         private readonly List<AnimationDelta> _deltas = new List<AnimationDelta>();
 
+        /// <summary>The conditions (Width, Height, DeltaX, DeltaY, VelosityX, VelosityY) of this type.</summary>
+        public IReadOnlyList<AnimationDelta> Items => _deltas;
+
         public AnimationDeltas(XmlNode mainNode, AnimationDeltaType type)
         {
             foreach (XmlNode node in mainNode.ChildNodes)

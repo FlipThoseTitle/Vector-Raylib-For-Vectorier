@@ -266,7 +266,7 @@ public class LevelMainController
         modelHuman.IsGadget = false;
         IsWin = true;
         CanPauseOrReload = false;
-        _ = Wait(time, Reload);
+        Wait(time, Reload);
     }
 
     //public void GoToWinScene()
@@ -295,7 +295,7 @@ public class LevelMainController
                 modelHuman.Death(GameEndType.GE_MURDER);
                 Console.WriteLine("Murder");
                 IsDeath = true;
-                _ = Wait(1, Reload);
+                Wait(1, Reload);
             }
         }
     }
@@ -313,7 +313,7 @@ public class LevelMainController
                 //Debug.Assert(false);
                 Console.WriteLine("Death");
                 IsDeath = true;
-                _ = Wait(1, Reload);
+                Wait(1, Reload);
             }
         }
     }
@@ -329,7 +329,7 @@ public class LevelMainController
                 modelHuman.Death(GameEndType.GE_LOSS);
                 Console.WriteLine("Loss");
                 IsDeath = true;
-                _ = Wait(1, Reload);
+                Wait(1, Reload);
             }
         }
     }
@@ -343,20 +343,43 @@ public class LevelMainController
             Console.WriteLine("Arrest");
             IsDeath = true;
 
-            _ = Wait(1, Reload);
+            Wait(1, Reload);
         }
     }
 
-    async Task Wait(float seconds, Action onEnd)
+    /// <summary>Seconds left before the automatic restart after a Win / Loss / Death / Arrest (negative: none).</summary>
+    private float _reloadDelay = -1f;
+
+    /// <summary>True while a Win / Loss / Death / Arrest is waiting for its automatic restart.</summary>
+    public bool IsReloadPending => _reloadDelay >= 0f;
+
+    /// <summary>
+    /// Starts the countdown before the automatic restart. It is counted down by <see cref="TickReloadDelay"/> from the
+    /// main loop, which skips it while the game is paused (Esc), so pausing freezes the countdown and unpausing resumes
+    /// it. It also runs on the main thread, like everything else that touches the level.
+    /// </summary>
+    void Wait(float seconds, Action onEnd)
     {
-        try
+        _reloadDelay = MathF.Max(0f, seconds);
+        _reloadAction = onEnd;
+    }
+
+    private Action _reloadAction;
+
+    /// <summary>Advances the restart countdown by <paramref name="seconds"/> (called only while the game runs).</summary>
+    public void TickReloadDelay(float seconds)
+    {
+        if (_reloadDelay < 0f)
         {
-            await Task.Delay((int)(seconds * 1000));
-            onEnd?.Invoke();
+            return;
         }
-        catch (Exception ex)
+        _reloadDelay -= seconds;
+        if (_reloadDelay <= 0f)
         {
-            Console.WriteLine(ex);
+            _reloadDelay = -1f;
+            var action = _reloadAction ?? Reload;
+            _reloadAction = null;
+            action();
         }
     }
 
@@ -382,6 +405,7 @@ public class LevelMainController
     protected void Reload()
     {
         Console.WriteLine("Reload");
+        _reloadDelay = -1f; // a manual restart (R) during the delay cancels the automatic one
         _Location.Reload();
         TutorialUnLockGame();
         InitCoins();

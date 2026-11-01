@@ -1,4 +1,5 @@
 using System.Xml;
+using Vector.Core.Runners;
 
 namespace Vector.Core.Trigger.Events
 {
@@ -10,10 +11,14 @@ namespace Vector.Core.Trigger.Events
 
         private int _OldValue;
 
-        public TE_ChangeVar(XmlNode p_node)
+        /// <param name="p_trigger">
+        /// The trigger owning the loop. A watched value such as ?getModel[_$Model].animationName reads the trigger's
+        /// variables ($Model, $Node...), so it needs the trigger (without it TF_Model crashed in InitFuncVar).
+        /// </param>
+        public TE_ChangeVar(XmlNode p_node, TriggerRunner p_trigger)
         {
             _Type = EventType.TET_VAR_CHANGE;
-            _Var = Variable.createVariable(p_node.Attributes["Value"].Value, string.Empty);
+            _Var = Variable.createVariable(p_node.Attributes["Value"]?.Value ?? string.Empty, string.Empty, p_trigger);
         }
 
         private void Init()

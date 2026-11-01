@@ -73,7 +73,7 @@ namespace Vector.Core.Trigger
             }
             if (p_node.LocalName.Equals("ValueChange"))
             {
-                triggerRunnerEvent = new TE_ChangeVar(p_node);
+                triggerRunnerEvent = new TE_ChangeVar(p_node, p_parent.ParentTrigger);
             }
             if (p_node.LocalName.Equals("OnStartGame"))
             {

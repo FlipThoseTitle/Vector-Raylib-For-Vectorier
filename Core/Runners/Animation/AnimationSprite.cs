@@ -129,7 +129,7 @@ namespace Vector.Core.Runners.Animation
 
             if (IsWork)
             {
-                Times += Raylib.GetFrameTime();
+                Times += Vector.TickSeconds; // one logic tick (see Vector.TicksThisFrame)
                 if (1 / FPS <= Times)
                 {
                     SetSpriteAnimation();

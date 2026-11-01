@@ -125,15 +125,62 @@ namespace Vector.Core.Node
             //GlobalObjects.AddDrawable(this);
         }
 
+        /// <summary>Radius of an ordinary node's dot (world units).</summary>
+        public const float NodeRadius = 1.2f;
+
+        /// <summary>COM and Camera dots: the biggest.</summary>
+        public const float CenterRadius = 2.4f;
+
+        /// <summary>DetectorH / DetectorV dots: bigger than a node, smaller than COM.</summary>
+        public const float DetectorRadius = 1.8f;
+
+        public static readonly Color CenterColor = new Color(40, 120, 255, 255);
+        public static readonly Color DetectorColor = new Color(235, 40, 40, 255);
+        public static readonly Color CameraColor = new Color(255, 215, 0, 255);
+
+        /// <summary>The nodes the N key's "Important" mode keeps: COM, DetectorH, DetectorV and Camera.</summary>
+        public bool IsImportant => GetImportantStyle(out _, out _);
+
+        /// <summary>Size and color of a special node (COM, detectors, Camera); false for an ordinary node.</summary>
+        public bool GetImportantStyle(out float radius, out Color color)
+        {
+            switch (_name)
+            {
+                case "COM":
+                    radius = CenterRadius;
+                    color = CenterColor;
+                    return true;
+                case "DetectorH":
+                case "DetectorV":
+                    radius = DetectorRadius;
+                    color = DetectorColor;
+                    return true;
+                case "Camera":
+                    radius = CenterRadius;
+                    color = CameraColor;
+                    return true;
+                default:
+                    radius = NodeRadius;
+                    color = Color.Green;
+                    return false;
+            }
+        }
+
         public void Draw()
+        {
+            GetImportantStyle(out float radius, out Color color);
+            Draw(radius, color);
+        }
+
+        public void Draw(float radius, Color color)
         {
             var vs = Sets.Current.Containers[1];
             Vector2 start = vs.TransformPoint(Start);
             Vector2 end = vs.TransformPoint(End);
 
-            Raylib.DrawCircleV(start, 1.2f, Color.Green);
+            Raylib.DrawCircleV(start, radius, color);
 
-            Raylib_cs.Raylib.DrawLineV(start, end, Color.Green);
+            Raylib_cs.Raylib.DrawLineV(start, end, color);
         }
 
         public void Reset()

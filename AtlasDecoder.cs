@@ -148,6 +148,12 @@ namespace Vector
                 p2 += worldPosition;
                 p3 += worldPosition;
 
+                // Off camera (corners as actually drawn, rotation and skew included): nothing to draw.
+                if (!Core.Runners.ImageRendering.IsQuadVisible(p0, p1, p2, p3))
+                {
+                    return;
+                }
+
                 Rlgl.DisableBackfaceCulling();
 
                 Rlgl.SetTexture(texture.Id);

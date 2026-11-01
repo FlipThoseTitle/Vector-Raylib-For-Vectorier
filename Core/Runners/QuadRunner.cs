@@ -31,6 +31,9 @@ namespace Vector.Core.Runners
 
         private List<Edge> Edges = new List<Edge>();
 
+        /// <summary>The sides: 0 top, 1 right, 2 bottom, 3 left (read-only view for the debug overlays).</summary>
+        public IReadOnlyList<Edge> EdgeList => Edges;
+
         public bool IsRender;
 
         public Action<QuadRunner> OnTransformationStart;

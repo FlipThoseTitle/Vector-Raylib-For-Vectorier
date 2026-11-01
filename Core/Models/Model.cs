@@ -116,11 +116,22 @@ namespace Vector.Core.Models
                 if (_ModelObject.DetectorVerticalLine != null)
                     _ModelObject.DetectorVerticalLine.Draw();
             }
-            if (Vector.RenderNodes)
+            if (Vector.NodeMode != Vector.NodeDisplay.None)
             {
-                for (int i = 0; i < _ModelObject.NodesAll.Count; i++)
+                var nodes = _ModelObject.NodesAll;
+                // Ordinary nodes first (All mode only), then COM / detectors / Camera on top so they stay visible.
+                if (Vector.NodeMode == Vector.NodeDisplay.All)
                 {
-                    _ModelObject.NodesAll[i].Draw();
+                    for (int i = 0; i < nodes.Count; i++)
+                    {
+                        if (!nodes[i].IsImportant)
+                            nodes[i].Draw();
+                    }
+                }
+                for (int i = 0; i < nodes.Count; i++)
+                {
+                    if (nodes[i].GetImportantStyle(out float radius, out Color color))
+                        nodes[i].Draw(radius, color);
                 }
             }
             if (Vector.RenderBoxes)

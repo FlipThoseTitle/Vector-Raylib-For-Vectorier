@@ -38,31 +38,42 @@ namespace Vector.Core.Trigger.Functions
 
         public int GetValue(ModelHuman p_model)
         {
+            if (_Geter == null || p_model == null)
+            {
+                return TF_Model.NoValue;
+            }
             return _Geter(p_model);
+        }
+
+        /// <summary>The named node, or null (no model object, unknown node name).</summary>
+        private ModelNode Node(ModelHuman p_model)
+        {
+            string name = _ParamVar?.ValueString;
+            return string.IsNullOrWhiteSpace(name) || p_model.ModelObject == null ? null : p_model.GetNode(name);
         }
 
         private int GetLocalPositionX(ModelHuman p_model)
         {
-            ModelNode modelNode = p_model.GetNode(_ParamVar.ValueString);
-            return (int)(modelNode.Start.X - parent.LocalPosition.X);
+            ModelNode modelNode = Node(p_model);
+            return modelNode == null || parent == null ? TF_Model.NoValue : (int)(modelNode.Start.X - parent.LocalPosition.X);
         }
 
         private int GetLocalPositionY(ModelHuman p_model)
         {
-            ModelNode modelNode = p_model.GetNode(_ParamVar.ValueString);
-            return (int)(modelNode.Start.Y - parent.LocalPosition.Y);
+            ModelNode modelNode = Node(p_model);
+            return modelNode == null || parent == null ? TF_Model.NoValue : (int)(modelNode.Start.Y - parent.LocalPosition.Y);
         }
 
         private int GetWorldPositionX(ModelHuman p_model)
         {
-            ModelNode modelNode = p_model.GetNode(_ParamVar.ValueString);
-            return (int)modelNode.Start.X;
+            ModelNode modelNode = Node(p_model);
+            return modelNode == null ? TF_Model.NoValue : (int)modelNode.Start.X;
         }
 
         private int GetWorldPositionY(ModelHuman p_model)
         {
-            ModelNode modelNode = p_model.GetNode(_ParamVar.ValueString);
-            return (int)modelNode.Start.Y;
+            ModelNode modelNode = Node(p_model);
+            return modelNode == null ? TF_Model.NoValue : (int)modelNode.Start.Y;
         }
     }
 }

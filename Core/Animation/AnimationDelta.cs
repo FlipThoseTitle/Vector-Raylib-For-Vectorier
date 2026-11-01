@@ -6,6 +6,9 @@ namespace Vector.Core.Animation
     {
         private readonly int _corner;
 
+        /// <summary>The corner as written in moves.xml (0 top-left, 1 top-right, 2 bottom-right, 3 bottom-left; -1 none).</summary>
+        public int Corner => _corner;
+
         public Vector2 Value
         {
             get;

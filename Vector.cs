@@ -128,7 +128,18 @@ namespace Vector
         public static bool RenderTriggers;
         public static bool RenderAreas;
 
-        public static bool RenderNodes;
+        /// <summary>N cycles: no nodes, every node, only COM / DetectorH / DetectorV / Camera.</summary>
+        public enum NodeDisplay { None, All, Important }
+
+        public static NodeDisplay NodeMode;
+
+        static readonly string[] NodeModeNames = { "Off", "All", "Important" };
+
+        /// <summary>G: a cross line through the screen center.</summary>
+        public static bool ShowGrid;
+
+        /// <summary>I: the conditions of the moves of the current interval (see MoveConditionsOverlay).</summary>
+        public static bool ShowMoveConditions;
         public static bool RenderEdges;
         public static bool RenderDetectors;
         public static bool RenderBoxes;
@@ -272,9 +283,21 @@ namespace Vector
                 if (!hideDebugUi)
                     UpdateButtons();
 
-                bool shouldUpdateGame = !pause || stepOneFrame;
+                // The game logic advances in fixed 1/60 s ticks. When a frame takes longer than that (a slow PC, a
+                // heavy scene), the missed ticks are caught up so the game keeps its real speed instead of slowing
+                // down with the frame rate. Paused: nothing runs, except one tick for Next Frame (F).
+                int ticks;
+                if (pause)
+                {
+                    tickAccumulator = 0;
+                    ticks = stepOneFrame ? 1 : 0;
+                }
+                else
+                {
+                    ticks = TicksThisFrame();
+                }
 
-                if (shouldUpdateGame)
+                for (int tick = 0; tick < ticks; tick++)
                 {
                     LevelMainController.current.Render();
 
@@ -283,8 +306,11 @@ namespace Vector
                         GlobalObjects.Updatables[i].Update();
                     }
 
-                    stepOneFrame = false;
+                    // The delay before the automatic restart (Win / Loss / Death) only runs with the game: Esc
+                    // freezes it, unpausing resumes it.
+                    LevelMainController.current.TickReloadDelay(TickSeconds);
                 }
+                stepOneFrame = false;
 
                 // Anti-aliasing: the level is first drawn into a bigger texture (outside BeginDrawing).
                 RenderWorldSupersampled();
@@ -302,8 +328,14 @@ namespace Vector
                         animation = player.ControllerAnimations.CurrentFrame + " - " + player.ControllerAnimations.Animation.Name;
                     }
 
+                    if (ShowGrid)
+                        DrawGrid();
+
                     // Names and outlines of the debug shapes shown (screen space, like the editor's labels).
                     DrawDebugLabels();
+
+                    if (ShowMoveConditions)
+                        MoveConditionsOverlay.Draw(Camera);
 
                     if (!hideDebugUi)
                     {
@@ -342,10 +374,13 @@ namespace Vector
             Add(KeyboardKey.T, "T", "Triggers", () => RenderTriggers = !RenderTriggers, () => RenderTriggers);
             Add(KeyboardKey.A, "A", "Areas", () => RenderAreas = !RenderAreas, () => RenderAreas);
             Add(KeyboardKey.P, "P", "Platforms", () => RenderPlatforms = !RenderPlatforms, () => RenderPlatforms);
-            Add(KeyboardKey.N, "N", "Nodes", () => RenderNodes = !RenderNodes, () => RenderNodes);
+            Add(KeyboardKey.N, "N", "Nodes", () => NodeMode = (NodeDisplay)(((int)NodeMode + 1) % NodeModeNames.Length), () => NodeMode != NodeDisplay.None);
+            Buttons[^1].DynamicText = () => "Nodes: " + NodeModeNames[(int)NodeMode];
             Add(KeyboardKey.E, "E", "Edges", () => RenderEdges = !RenderEdges, () => RenderEdges);
             Add(KeyboardKey.D, "D", "Detectors", () => RenderDetectors = !RenderDetectors, () => RenderDetectors);
             Add(KeyboardKey.B, "B", "Bounding", () => RenderBoxes = !RenderBoxes, () => RenderBoxes);
+            Add(KeyboardKey.I, "I", "Move Conditions", () => ShowMoveConditions = !ShowMoveConditions, () => ShowMoveConditions);
+            Add(KeyboardKey.G, "G", "Center Line", () => ShowGrid = !ShowGrid, () => ShowGrid);
 
             // Playback.
             y += sectionGap - gap;
@@ -360,11 +395,58 @@ namespace Vector
             Add(KeyboardKey.Q, "Q", "Anti-alias", ToggleAntiAlias);
             Buttons[^1].DynamicText = () => "Anti-alias: " + AntiAliasNames[AntiAlias];
             Add(KeyboardKey.F11, "F11", "Full Screen", ToggleFullScreen, () => Raylib.IsWindowState(ConfigFlags.BorderlessWindowMode));
+            Add(KeyboardKey.M, "M", "Mute Music", SoundsManager.ToggleMusicMute, () => SoundsManager.MusicMuted);
         }
 
         void ToggleSlowMode()
         {
             LevelMainController.current.slowModeFrames = LevelMainController.current.slowModeFrames == 10 ? 1 : 10;
+        }
+
+        // ================= FIXED TIME STEP ================= //
+
+        /// <summary>Length of one game logic tick: the game was made for 60 updates per second.</summary>
+        public const float TickSeconds = 1f / 60f;
+
+        /// <summary>Most ticks run in one frame: below 15 FPS the game slows down rather than freezing to catch up.</summary>
+        const int MaxTicksPerFrame = 4;
+
+        float tickAccumulator;
+
+        /// <summary>
+        /// How many logic ticks this frame needs to keep the game at real speed. At a steady 60 FPS it is always 1
+        /// (frame times are rounded to the nearest tick, so the small jitter of a 60 Hz frame does not alternate 0
+        /// and 2); at 30 FPS it is 2. A single very long frame (loading, a dragged window) counts as one tick.
+        /// </summary>
+        int TicksThisFrame()
+        {
+            float frame = Raylib.GetFrameTime();
+            if (frame <= 0 || frame > TickSeconds * MaxTicksPerFrame * 2)
+            {
+                tickAccumulator = 0;
+                return 1;
+            }
+            tickAccumulator += frame;
+            int ticks = (int)MathF.Round(tickAccumulator / TickSeconds);
+            if (ticks > MaxTicksPerFrame)
+            {
+                tickAccumulator = 0;
+                return MaxTicksPerFrame;
+            }
+            tickAccumulator -= ticks * TickSeconds;
+            return ticks;
+        }
+
+        // ================= CENTER LINE ================= //
+
+        static readonly Color GridCenter = new(255, 255, 255, 140);
+
+        /// <summary>G: a white translucent cross line through the exact screen center.</summary>
+        void DrawGrid()
+        {
+            float cx = ScreenWidth / 2f, cy = ScreenHeight / 2f;
+            Raylib.DrawLineEx(new Vector2(cx, 0), new Vector2(cx, ScreenHeight), 1.5f, GridCenter);
+            Raylib.DrawLineEx(new Vector2(0, cy), new Vector2(ScreenWidth, cy), 1.5f, GridCenter);
         }
 
         // ================= ANTI-ALIASING ================= //
@@ -377,6 +459,10 @@ namespace Vector
         RenderTexture2D sceneTarget;
         bool sceneTargetReady;
         int sceneScale;
+
+        /// <summary>4×: the scene is halved twice; this holds the 2× step.</summary>
+        RenderTexture2D halfTarget;
+        bool halfTargetReady;
 
         /// <summary>Supersampling factor for the current setting and screen (capped to what a GPU texture allows).</summary>
         int SupersampleFactor()
@@ -394,9 +480,43 @@ namespace Vector
         }
 
         /// <summary>
+        /// Draws a render texture as an exact copy (blending off: source color and alpha replace the destination).
+        /// The scene texture's color is already the final, blended color, but its alpha is not 1 wherever something
+        /// translucent was drawn (with normal blending the alpha channel is blended too: a·a + 1·(1−a) &lt; 1). Drawn
+        /// with normal blending, those pixels let the gray background show through again, and textures, triggers,
+        /// areas and every other translucent thing looked paler with anti-aliasing on.
+        /// </summary>
+        static void DrawTextureCopy(Texture2D texture, int width, int height)
+        {
+            Rlgl.SetBlendFactors(1 /* GL_ONE */, 0 /* GL_ZERO */, 0x8006 /* GL_FUNC_ADD */);
+            Raylib.BeginBlendMode(BlendMode.Custom);
+            // Render textures are stored upside down: a negative source height flips them back.
+            Raylib.DrawTexturePro(texture,
+                new Raylib_cs.Rectangle(0, 0, texture.Width, -texture.Height),
+                new Raylib_cs.Rectangle(0, 0, width, height),
+                Vector2.Zero, 0, Color.White);
+            Raylib.EndBlendMode();
+        }
+
+        static bool EnsureTarget(ref RenderTexture2D target, ref bool ready, int width, int height)
+        {
+            if (ready && target.Texture.Width == width && target.Texture.Height == height)
+                return true;
+            if (ready)
+                Raylib.UnloadRenderTexture(target);
+            target = Raylib.LoadRenderTexture(width, height);
+            ready = target.Id != 0;
+            if (ready)
+                Raylib.SetTextureFilter(target.Texture, TextureFilter.Bilinear);
+            return ready;
+        }
+
+        /// <summary>
         /// Models are drawn with plain triangles, circles and thick lines, which raylib does not smooth. With
         /// anti-aliasing on, the level is drawn at 2× or 4× the screen size and scaled down with filtering: the
         /// jagged edges of the models (and of rotated images) become smooth. The UI is drawn on top at screen size.
+        /// Each halving is one bilinear draw (bilinear at exactly half the size averages each 2×2 block), so 4× is
+        /// two cheap passes instead of rebuilding a full mipmap chain of the big texture every frame.
         /// </summary>
         void RenderWorldSupersampled()
         {
@@ -407,18 +527,12 @@ namespace Vector
                 return;
             }
             int width = ScreenWidth * factor, height = ScreenHeight * factor;
-            if (!sceneTargetReady || sceneScale != factor || sceneTarget.Texture.Width != width || sceneTarget.Texture.Height != height)
+            if (!EnsureTarget(ref sceneTarget, ref sceneTargetReady, width, height))
             {
-                ReleaseSceneTarget();
-                sceneTarget = Raylib.LoadRenderTexture(width, height);
-                sceneTargetReady = sceneTarget.Id != 0;
-                sceneScale = factor;
-                if (!sceneTargetReady)
-                {
-                    AntiAlias = 0; // the GPU refused: back to direct drawing
-                    return;
-                }
+                AntiAlias = 0; // the GPU refused: back to direct drawing
+                return;
             }
+            sceneScale = factor;
 
             var camera = Camera;
             camera.Offset *= factor;
@@ -431,24 +545,38 @@ namespace Vector
             Raylib.EndMode2D();
             Raylib.EndTextureMode();
 
-            // 2×: bilinear averages each 2×2 block exactly. 4×: mipmaps average the 4×4 blocks (trilinear).
+            if (factor == 4 && EnsureTarget(ref halfTarget, ref halfTargetReady, ScreenWidth * 2, ScreenHeight * 2))
+            {
+                Raylib.BeginTextureMode(halfTarget);
+                DrawTextureCopy(sceneTarget.Texture, ScreenWidth * 2, ScreenHeight * 2);
+                Raylib.EndTextureMode();
+                return;
+            }
+            ReleaseHalfTarget();
+
+            // 3× (a screen too big for 4×): mipmaps average the blocks (trilinear).
             if (factor > 2)
             {
                 Raylib.GenTextureMipmaps(ref sceneTarget.Texture);
                 Raylib.SetTextureFilter(sceneTarget.Texture, TextureFilter.Trilinear);
             }
-            else
-            {
-                Raylib.SetTextureFilter(sceneTarget.Texture, TextureFilter.Bilinear);
-            }
         }
 
         void ReleaseSceneTarget()
         {
+            ReleaseHalfTarget();
             if (!sceneTargetReady)
                 return;
             Raylib.UnloadRenderTexture(sceneTarget);
             sceneTargetReady = false;
+        }
+
+        void ReleaseHalfTarget()
+        {
+            if (!halfTargetReady)
+                return;
+            Raylib.UnloadRenderTexture(halfTarget);
+            halfTargetReady = false;
         }
 
         /// <summary>The level: the supersampled texture when anti-aliasing is on, drawn directly otherwise.</summary>
@@ -456,12 +584,8 @@ namespace Vector
         {
             if (sceneTargetReady && SupersampleFactor() > 1)
             {
-                var texture = sceneTarget.Texture;
-                // Render textures are stored upside down: a negative source height flips them back.
-                Raylib.DrawTexturePro(texture,
-                    new Raylib_cs.Rectangle(0, 0, texture.Width, -texture.Height),
-                    new Raylib_cs.Rectangle(0, 0, ScreenWidth, ScreenHeight),
-                    Vector2.Zero, 0, Color.White);
+                var texture = sceneScale == 4 && halfTargetReady ? halfTarget.Texture : sceneTarget.Texture;
+                DrawTextureCopy(texture, ScreenWidth, ScreenHeight);
                 return;
             }
             Raylib.BeginMode2D(Camera);
@@ -477,25 +601,29 @@ namespace Vector
                 GlobalObjects.Drawables[i].Draw();
             }
 
+            // Debug shapes: only those inside the camera's view are drawn.
             if (RenderPlatforms)
             {
                 for (int i = 0; i < Sets.Current.Quads.Count; i++)
                 {
-                    Sets.Current.Quads[i].Draw();
+                    if (IsOnCamera(Sets.Current.Quads[i]))
+                        Sets.Current.Quads[i].Draw();
                 }
             }
             if (RenderAreas)
             {
                 for (int i = 0; i < Sets.Current.Areas.Count; i++)
                 {
-                    Sets.Current.Areas[i].Draw();
+                    if (IsOnCamera(Sets.Current.Areas[i]))
+                        Sets.Current.Areas[i].Draw();
                 }
             }
             if (RenderTriggers)
             {
                 for (int i = 0; i < Sets.Current.Triggers.Count; i++)
                 {
-                    Sets.Current.Triggers[i].DrawRectangle();
+                    if (IsOnCamera(Sets.Current.Triggers[i]))
+                        Sets.Current.Triggers[i].DrawRectangle();
                 }
             }
 
@@ -504,6 +632,21 @@ namespace Vector
                 Core.Models.Model.ModelsAll[i].Draw();
             }
 
+        }
+
+        /// <summary>True when the runner's rectangle (as drawn) overlaps the camera's view.</summary>
+        public static bool IsOnCamera(QuadRunner runner)
+        {
+            if (Sets.Current == null)
+                return true;
+            var vs = Sets.Current.Containers[1];
+            var origin = vs.TransformPoint(runner.rectangle.Origin);
+            var size = runner.rectangle.Size * runner.WorldScale;
+            var view = Instance.CameraRectangle;
+            float minX = MathF.Min(origin.X, origin.X + size.X), maxX = MathF.Max(origin.X, origin.X + size.X);
+            float minY = MathF.Min(origin.Y, origin.Y + size.Y), maxY = MathF.Max(origin.Y, origin.Y + size.Y);
+            const float margin = 4;
+            return maxX >= view.MinX - margin && minX <= view.MaxX + margin && maxY >= view.MinY - margin && minY <= view.MaxY + margin;
         }
 
         // ================= FULL SCREEN ================= //
@@ -550,7 +693,7 @@ namespace Vector
                 for (int i = 0; i < Sets.Current.Quads.Count; i++)
                 {
                     var quad = Sets.Current.Quads[i];
-                    if (!quad.IsEnabled || quad is AreaRunner || quad is TriggerRunner)
+                    if (!quad.IsEnabled || quad is AreaRunner || quad is TriggerRunner || !IsOnCamera(quad))
                         continue;
                     if (quad is TrapezoidRunner trapezoid)
                     {
@@ -568,7 +711,7 @@ namespace Vector
                 for (int i = 0; i < Sets.Current.Areas.Count; i++)
                 {
                     var area = Sets.Current.Areas[i];
-                    if (!area.IsEnabled)
+                    if (!area.IsEnabled || !IsOnCamera(area))
                         continue;
                     string label = area.Name;
                     DrawRunner(area, vs, AreaOutline, label);
@@ -579,7 +722,7 @@ namespace Vector
                 for (int i = 0; i < Sets.Current.Triggers.Count; i++)
                 {
                     var trigger = Sets.Current.Triggers[i];
-                    if (!trigger.IsEnabled)
+                    if (!trigger.IsEnabled || !IsOnCamera(trigger))
                         continue;
                     DrawRunner(trigger, vs, TriggerOutline, trigger.Name);
                 }
@@ -673,7 +816,10 @@ namespace Vector
             Settings = $"RenderPlatforms={RenderPlatforms}\n" +
                        $"RenderTriggers={RenderTriggers}\n" +
                        $"RenderAreas={RenderAreas}\n" +
-                       $"RenderNodes={RenderNodes}\n" +
+                       $"NodeMode={(int)NodeMode}\n" +
+                       $"ShowGrid={ShowGrid}\n" +
+                       $"ShowMoveConditions={ShowMoveConditions}\n" +
+                       $"MusicMuted={SoundsManager.MusicMuted}\n" +
                        $"RenderEdges={RenderEdges}\n" +
                        $"RenderDetectors={RenderDetectors}\n" +
                        $"RenderBoxes={RenderBoxes}\n" +
@@ -705,8 +851,21 @@ namespace Vector
                             case "RenderAreas":
                                 RenderAreas = boolValue;
                                 break;
-                            case "RenderNodes":
-                                RenderNodes = boolValue;
+                            case "RenderNodes": // older settings files: on = all nodes
+                                NodeMode = boolValue ? NodeDisplay.All : NodeDisplay.None;
+                                break;
+                            case "NodeMode":
+                                if (int.TryParse(value, out int nodeMode))
+                                    NodeMode = (NodeDisplay)Math.Clamp(nodeMode, 0, NodeModeNames.Length - 1);
+                                break;
+                            case "ShowGrid":
+                                ShowGrid = boolValue;
+                                break;
+                            case "ShowMoveConditions":
+                                ShowMoveConditions = boolValue;
+                                break;
+                            case "MusicMuted":
+                                SoundsManager.MusicMuted = boolValue;
                                 break;
                             case "RenderEdges":
                                 RenderEdges = boolValue;

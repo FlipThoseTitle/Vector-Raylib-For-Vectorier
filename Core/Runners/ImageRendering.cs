@@ -106,16 +106,18 @@ namespace Vector.Core.Runners
                 return;
             }
 
+            if (Matrix != null)
+            {
+                // Culled with its real (transformed) corners inside DrawTextureAffine: the plain rectangle below
+                // ignores the matrix (rotation, skew, flip).
+                DrawTextureAffine(Texture, WorldPosition, WorldScale, Matrix.Value, Color, Pivot);
+                return;
+            }
+
             Rectangle renderRect = GetRenderRectangle();
 
             if (!IsRectangleVisible(renderRect))
             {
-                return;
-            }
-
-            if (Matrix != null)
-            {
-                DrawTextureAffine(Texture, WorldPosition, WorldScale, Matrix.Value, Color, Pivot);
                 return;
             }
 
@@ -207,6 +209,17 @@ namespace Vector.Core.Runners
             return Raylib.CheckCollisionRecs(rect, Vector.Instance.CameraRectangle);
         }
 
+        /// <summary>True when the bounding box of the four drawn corners overlaps the camera's view.</summary>
+        public static bool IsQuadVisible(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3)
+        {
+            var view = Vector.Instance.CameraRectangle;
+            float minX = MathF.Min(MathF.Min(p0.X, p1.X), MathF.Min(p2.X, p3.X));
+            float maxX = MathF.Max(MathF.Max(p0.X, p1.X), MathF.Max(p2.X, p3.X));
+            float minY = MathF.Min(MathF.Min(p0.Y, p1.Y), MathF.Min(p2.Y, p3.Y));
+            float maxY = MathF.Max(MathF.Max(p0.Y, p1.Y), MathF.Max(p2.Y, p3.Y));
+            return maxX >= view.MinX && minX <= view.MaxX && maxY >= view.MinY && minY <= view.MaxY;
+        }
+
         static void DrawTextureAffine(Texture2D texture,
             Vector2 worldPosition,
             Vector2 worldScale,
@@ -242,6 +255,11 @@ namespace Vector.Core.Runners
             p2 += worldPosition;
             p3 += worldPosition;
 
+            // Off camera (corners as actually drawn, rotation and skew included): nothing to draw.
+            if (!IsQuadVisible(p0, p1, p2, p3))
+            {
+                return;
+            }
 
             Rlgl.DisableBackfaceCulling();
 

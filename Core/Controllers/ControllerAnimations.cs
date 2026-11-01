@@ -84,6 +84,9 @@ namespace Vector.Core.Controllers
 
         private List<AnimationInterval> Intervals => Animation.Interval(CurrentFrame);
 
+        /// <summary>A copy of the intervals active at the current frame (the debug overlay's view; I key).</summary>
+        public List<AnimationInterval> CurrentIntervals => Animation == null ? new List<AnimationInterval>() : new List<AnimationInterval>(Intervals);
+
         private bool IsBuffer => _Buffer != null && !_Buffer.IsBufferEmpty;
 
         public int CurrentFrame

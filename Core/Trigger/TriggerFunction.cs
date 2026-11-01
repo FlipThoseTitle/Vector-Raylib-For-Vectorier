@@ -22,7 +22,7 @@ namespace Vector.Core.Trigger
 
         public static void InitFuncVar(TriggerRunner p_parent, ref Variable p_var, string p_name)
         {
-            if (p_name.Length != 0 && p_name[0] == '_')
+            if (p_name.Length != 0 && p_name[0] == '_' && p_parent != null)
             {
                 p_var = p_parent.GetVar(p_name);
             }
@@ -30,6 +30,8 @@ namespace Vector.Core.Trigger
             {
                 p_var = createVariable(p_name, string.Empty, p_parent);
             }
+            // An unknown variable (GetVar logs it) must not crash the level: it reads as an empty name.
+            p_var ??= createVariable(string.Empty, p_name, p_parent);
         }
     }
 }
